@@ -1,0 +1,707 @@
+﻿@page "/protein-data"
+@using Entities
+@using PeptideDataHomogenizer.Data
+@using SuperSimpleBlazorModal
+@using System.Reflection.Metadata
+@using System.Text
+@inject DatabaseDataHandler DatabaseDataHandler
+@inject IJSRuntime JSRuntime
+
+@rendermode InteractiveServer
+
+<h3 class="mb-4">Approved Protein Data</h3>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Protein Records</h5>
+        <div class="d-flex flex-row flex-wrap align-items-center gap-2">
+            <button class="btn btn-sm btn-warning me-2" @onclick="OpenHomogenizeDataModal" title="Homogenize Conflicting Values">
+                <i class="fas fa-exchange-alt me-1"></i> Homogenize
+            </button>
+            <button class="btn btn-sm btn-success me-2" @onclick="AddNewProtein">
+                <i class="fas fa-plus me-1"></i> Add Protein
+            </button>
+            <button class="btn btn-sm btn-secondary" @onclick="ExportToCSV">
+                <i class="fas fa-file-csv me-1"></i> CSV
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Search Bar -->
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <div class="input-group">
+                    <input type="text" class="form-control" placeholder="Search all fields..." @bind="searchTerm" />
+                    <button class="btn btn-outline-secondary" type="button" @onclick="SearchData">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                    <button class="btn btn-outline-danger" type="button" @onclick="ClearSearch">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column Filters -->
+        <div class="row mb-3">
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedClassification" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Classifications</option>
+                    @foreach (var item in availableClassifications)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedSoftware" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Software</option>
+                    @foreach (var item in availableSoftware)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedWaterModel" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Water Models</option>
+                    @foreach (var item in availableWaterModels)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedForceField" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Force Fields</option>
+                    @foreach (var item in availableForceFields)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedMethod" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Methods</option>
+                    @foreach (var item in availableMethods)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedIons" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Ions</option>
+                    @foreach (var item in availableIons)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Protein ID</th>
+                        <th>Classification</th>
+                        <th>Software</th>
+                        <th>Version</th>
+                        <th>Water Model</th>
+                        <th>Force Field</th>
+                        <th>Method</th>
+                        <th>Temp (K)</th>
+                        <th>Ions</th>
+                        <th>Ion Conc. (M)</th>
+                        <th>Sim Length (ns)</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (filteredProteinData == null)
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center">Loading data...</td>
+                        </tr>
+                    }
+                    else if (!filteredProteinData.Any())
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center">No protein data found</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var protein in filteredProteinData)
+                        {
+                            <tr>
+                                <td>@protein.ProteinId</td>
+                                <td>@protein.Classification</td>
+                                <td>@protein.SoftwareName</td>
+                                <td>@protein.SoftwareVersion</td>
+                                <td>@protein.WaterModel</td>
+                                <td>@protein.ForceField</td>
+                                <td>@protein.SimulationMethod</td>
+                                <td>@protein.Temperature</td>
+                                <td>@protein.Ions</td>
+                                <td>@protein.IonConcentration</td>
+                                <td>@protein.SimulationLength</td>
+                                <td>
+                                    <button class="btn btn-sm btn-info" @onclick="() => OpenDoiInNewTab(protein.Article.Doi)">Open Article</button>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveProtein(protein)">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+<SimpleModal @ref="modal"
+Id="article-detail-modal"
+OnModalStateChange="HandleModalStateChange"
+OpenOnFirstRender="false">
+
+    <div class="modal-header">
+        <h5 class="modal-title">Add New Protein Data</h5>
+        <button type="button" class="btn-close" @onclick="()=>modal.CloseModal()" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Protein ID</label>
+                <input class="form-control" @bind="newProtein.ProteinId" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Classification</label>
+                <input class="form-control" @bind="newProtein.Classification" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Software Name</label>
+                <input class="form-control" @bind="newProtein.SoftwareName" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Software Version</label>
+                <input class="form-control" @bind="newProtein.SoftwareVersion" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Water Model</label>
+                <input class="form-control" @bind="newProtein.WaterModel" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Force Field</label>
+                <input class="form-control" @bind="newProtein.ForceField" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Method</label>
+                <input class="form-control" @bind="newProtein.SimulationMethod" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Temperature (K)</label>
+                <input type="number" class="form-control" @bind="newProtein.Temperature" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Ions</label>
+                <input class="form-control" @bind="newProtein.Ions" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Ion Concentration (M)</label>
+                <input type="number" class="form-control" @bind="newProtein.IonConcentration" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Simulation Length (ns)</label>
+                <input type="number" class="form-control" @bind="newProtein.SimulationLength" />
+            </div>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" @onclick="()=>modal.CloseModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveProtein">Save</button>
+    </div>
+</SimpleModal>
+
+<SimpleModal @ref="homogenizeDataModal"
+             Id="homogenize-data-modal"
+             OpenOnFirstRender="false">
+    <div class="modal-header">
+        <h5 class="modal-title">Homogenize Protein Data</h5>
+        <button type="button" class="btn-close" @onclick="()=>homogenizeDataModal.CloseModal()" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <p class="mb-3 text-muted">
+            Review and resolve conflicting values for each property. Select the preferred value to apply to all records.
+        </p>
+            <!-- ... existing header ... -->
+            @if (conflicts?.Any() ?? false)
+            {
+                @foreach (var conflict in conflicts)
+                {
+                    <div class="mb-4 border rounded p-3 bg-light">
+                        <div class="mb-2 fw-bold text-primary">
+                            @conflict.PropertyDisplayName
+                        </div>
+
+                        @foreach (var group in conflict.ValueGroups)
+                        {
+                            <div class="mb-3 ps-3 border-start border-3 border-primary">
+                                <div class="mb-1 small text-muted">
+                                    Similar values group: <span class="fst-italic">@group.NormalizedValue</span>
+                                </div>
+
+                                <ul class="mb-2">
+                                    @foreach (var value in group.OriginalValues)
+                                    {
+                                        <li class="d-flex align-items-center gap-2">
+                                            @if (group.ExcludedValues.Contains(value))
+                                            {
+                                                <span class="badge bg-secondary me-2">@value</span>
+                                                <span class="text-muted small">
+                                                    (@group.ValueCounts[value] records) - EXCLUDED
+                                                </span>
+                                                <button class="btn btn-sm btn-outline-success ms-auto"
+                                                        @onclick="() => group.ExcludedValues.Remove(value)">
+                                                    Include
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge @(value == group.SelectedValue ? "bg-success" : "bg-danger") me-2">@value</span>
+                                                <span class="text-muted small">
+                                                    (@group.ValueCounts[value] records)
+                                                </span>
+                                                @if (value != group.SelectedValue)
+                                                {
+                                                    <button class="btn btn-sm btn-outline-secondary ms-auto"
+                                                            @onclick="() => group.ExcludedValues.Add(value)">
+                                                        Exclude
+                                                    </button>
+                                                }
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+
+                                <div class="d-flex align-items-center gap-2">
+                                    <select class="form-select form-select-sm w-auto"
+                                            @bind="group.SelectedValue">
+                                        @foreach (var value in group.OriginalValues.Where(v => !group.ExcludedValues.Contains(v)))
+                                        {
+                                            <option value="@value">@value</option>
+                                        }
+                                    </select>
+
+                                    <button class="btn btn-sm btn-primary"
+                                            @onclick="() => ApplyHomogenization(conflict, group)">
+                                        Apply to this group
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" @onclick="()=>homogenizeDataModal.CloseModal()">Close</button>
+    </div>
+</SimpleModal>
+
+@code {
+    // Conflict info for modal
+    private List<PropertyConflict> conflicts;
+
+    // Properties to check with their specific normalizers
+    private readonly Dictionary<string, (string Display, Func<string, string> Normalizer)> conflictProperties = new()
+    {
+        [nameof(ProteinData.SoftwareName)] = ("Software Name", NormalizeSoftwareName),
+        [nameof(ProteinData.SoftwareVersion)] = ("Software Version", NormalizeVersion),
+        [nameof(ProteinData.WaterModel)] = ("Water Model", NormalizeWaterModel),
+        [nameof(ProteinData.ForceField)] = ("Force Field", NormalizeForceField),
+        [nameof(ProteinData.SimulationMethod)] = ("Simulation Method", NormalizeSimulationMethod)
+    };
+
+    // Show modal and calculate conflicts
+    private async Task OpenHomogenizeDataModal()
+    {
+        conflicts = null;
+        await homogenizeDataModal.ShowModal();
+        await Task.Delay(50); // allow modal to render
+        conflicts = GetConflicts();
+        StateHasChanged();
+    }
+
+    // Find conflicting values for each property
+    private List<PropertyConflict> GetConflicts()
+    {
+        var result = new List<PropertyConflict>();
+
+        foreach (var prop in conflictProperties)
+        {
+            var propertyName = prop.Key;
+            var displayName = prop.Value.Display;
+            var normalizer = prop.Value.Normalizer;
+
+            // Group by normalized value
+            var normalizedGroups = allProteinData
+                .Select(p => GetPropertyValue(p, propertyName))
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .GroupBy(v => normalizer(v))
+                .Where(g => g.Count() > 0)
+                .ToList();
+
+            // Find groups that have multiple distinct original values
+            var conflictGroups = normalizedGroups
+                .Where(g => g.Distinct().Count() > 1)
+                .Select(g => new ValueGroup
+                {
+                    NormalizedValue = g.Key,
+                    OriginalValues = g.Distinct().ToList(),
+                    ValueCounts = g.GroupBy(v => v).ToDictionary(x => x.Key, x => x.Count()),
+                    SelectedValue = g.GroupBy(v => v)
+                                    .OrderByDescending(g => g.Count())
+                                    .First()
+                                    .Key
+                })
+                .ToList();
+
+            if (conflictGroups.Any())
+            {
+                result.Add(new PropertyConflict
+                {
+                    PropertyName = propertyName,
+                    PropertyDisplayName = displayName,
+                    ValueGroups = conflictGroups
+                });
+            }
+        }
+        return result;
+    }
+
+    // Property-specific normalizers
+    private static string NormalizeSoftwareName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+
+        // Handle common software name variations
+        return value.Trim()
+            .ToLowerInvariant()
+            .Replace(" ", "")
+            .Replace("-", "")
+            .Replace("_", "")
+            .Replace(".", "");
+    }
+
+    private static string NormalizeVersion(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+
+        // Handle version number variations
+        return value.Trim()
+            .ToLowerInvariant()
+            .Replace(" ", "")
+            .Replace("version", "")
+            .Replace("ver", "")
+            .Replace("v", "")
+            .TrimStart('0') // Remove leading zeros
+            .Trim();
+    }
+
+    private static string NormalizeForceField(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+
+        var normalized = value.Trim()
+            .ToUpperInvariant()
+            .Replace(" ", "")
+            .Replace("-", "")
+            .Replace("_", "");
+
+        return normalized;
+    }
+
+
+    private static string NormalizeWaterModel(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        // Normalize common water model names
+        return value.Trim()
+            .ToUpperInvariant();
+    }
+    private static string NormalizeSimulationMethod(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        // Normalize common simulation methods
+        return value;
+    }
+
+    // Get property value from ProteinData object
+    private static string GetPropertyValue(ProteinData protein, string propertyName)
+    {
+        var prop = typeof(ProteinData).GetProperty(propertyName);
+        return prop?.GetValue(protein)?.ToString() ?? string.Empty;
+    }
+
+    // Set property value on ProteinData object
+    private static void SetPropertyValue(ProteinData protein, string propertyName, string value)
+    {
+        var prop = typeof(ProteinData).GetProperty(propertyName);
+        if (prop != null && prop.CanWrite)
+        {
+            prop.SetValue(protein, value);
+        }
+    }
+
+    // Apply homogenization for a property
+    private async Task ApplyHomogenization(PropertyConflict conflict, ValueGroup group)
+    {
+        var normalizer = conflictProperties[conflict.PropertyName].Normalizer;
+        var targetNormalized = normalizer(group.SelectedValue);
+
+        foreach (var protein in allProteinData)
+        {
+            var current = GetPropertyValue(protein, conflict.PropertyName);
+            if (!string.IsNullOrWhiteSpace(current))
+            {
+                // Only replace if:
+                // 1. The value normalizes to the same as our target
+                // 2. The value isn't in our excluded list
+                if (normalizer(current) == targetNormalized && !group.ExcludedValues.Contains(current))
+                {
+                    SetPropertyValue(protein, conflict.PropertyName, group.SelectedValue);
+                }
+            }
+        }
+
+        // Persist changes
+        foreach (var protein in allProteinData)
+        {
+            await DatabaseDataHandler.UpdateAsync(protein);
+        }
+        await LoadProteinData();
+        conflicts = GetConflicts();
+        StateHasChanged();
+    }
+
+    // Enhanced conflict class
+    private class PropertyConflict
+    {
+        public string PropertyName { get; set; }
+        public string PropertyDisplayName { get; set; }
+        public List<ValueGroup> ValueGroups { get; set; } = new();
+    }
+
+    private class ValueGroup
+    {
+        public string NormalizedValue { get; set; }
+        public List<string> OriginalValues { get; set; }
+        public Dictionary<string, int> ValueCounts { get; set; }
+        public string SelectedValue { get; set; }
+        public List<string> ExcludedValues { get; set; } = new();
+    }
+
+}
+
+
+@code {
+    private List<ProteinData> allProteinData = new();
+    private List<ProteinData> filteredProteinData = new();
+    private ProteinData newProtein = new();
+
+    // Search and filter fields
+    private string searchTerm = string.Empty;
+    private string selectedClassification = string.Empty;
+    private string selectedSoftware = string.Empty;
+    private string selectedWaterModel = string.Empty;
+    private string selectedForceField = string.Empty;
+    private string selectedMethod = string.Empty;
+    private string selectedIons = string.Empty;
+
+    // Available filter options
+    private List<string> availableClassifications = new();
+    private List<string> availableSoftware = new();
+    private List<string> availableWaterModels = new();
+    private List<string> availableForceFields = new();
+    private List<string> availableMethods = new();
+    private List<string> availableIons = new();
+
+    private SimpleModal modal;
+    private SimpleModal homogenizeDataModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProteinData();
+    }
+
+    private async Task LoadProteinData()
+    {
+        allProteinData = await DatabaseDataHandler.GetApprovedProteinDataAsync();
+        UpdateFilteredData();
+        InitializeFilterOptions();
+    }
+
+    private void InitializeFilterOptions()
+    {
+        availableClassifications = allProteinData
+            .Select(p => p.Classification)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+
+        availableSoftware = allProteinData
+            .Select(p => p.SoftwareName)
+            .Distinct()
+            .OrderBy(s => s)
+            .ToList();
+
+        availableWaterModels = allProteinData
+            .Select(p => p.WaterModel)
+            .Distinct()
+            .OrderBy(w => w)
+            .ToList();
+
+        availableForceFields = allProteinData
+            .Select(p => p.ForceField)
+            .Distinct()
+            .OrderBy(f => f)
+            .ToList();
+
+        availableMethods = allProteinData
+            .Select(p => p.SimulationMethod)
+            .Distinct()
+            .OrderBy(m => m)
+            .ToList();
+
+        availableIons = allProteinData
+            .Select(p => p.Ions)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+    }
+
+    private void UpdateFilteredData()
+    {
+        var query = allProteinData.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            query = query.Where(p =>
+                (p.ProteinId != null && p.ProteinId.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.Classification != null && p.Classification.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.SoftwareName != null && p.SoftwareName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.WaterModel != null && p.WaterModel.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.ForceField != null && p.ForceField.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.SimulationMethod != null && p.SimulationMethod.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.Ions != null && p.Ions.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (!string.IsNullOrEmpty(selectedClassification))
+            query = query.Where(p => p.Classification == selectedClassification);
+
+        if (!string.IsNullOrEmpty(selectedSoftware))
+            query = query.Where(p => p.SoftwareName == selectedSoftware);
+
+        if (!string.IsNullOrEmpty(selectedWaterModel))
+            query = query.Where(p => p.WaterModel == selectedWaterModel);
+
+        if (!string.IsNullOrEmpty(selectedForceField))
+            query = query.Where(p => p.ForceField == selectedForceField);
+
+        if (!string.IsNullOrEmpty(selectedMethod))
+            query = query.Where(p => p.SimulationMethod == selectedMethod);
+
+        if (!string.IsNullOrEmpty(selectedIons))
+            query = query.Where(p => p.Ions == selectedIons);
+
+        filteredProteinData = query.ToList();
+
+        StateHasChanged();
+    }
+
+    private void SearchData()
+    {
+        UpdateFilteredData();
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = string.Empty;
+        selectedClassification = string.Empty;
+        selectedSoftware = string.Empty;
+        selectedWaterModel = string.Empty;
+        selectedForceField = string.Empty;
+        selectedMethod = string.Empty;
+        selectedIons = string.Empty;
+        UpdateFilteredData();
+    }
+
+    private async Task RemoveProtein(ProteinData protein)
+    {
+        await DatabaseDataHandler.DeleteAsync(protein);
+        await LoadProteinData();
+    }
+
+    private async Task AddNewProtein()
+    {
+        newProtein = new ProteinData();
+        await modal.ShowModal();
+    }
+
+    private async Task SaveProtein()
+    {
+        await DatabaseDataHandler.AddAsync(newProtein);
+        await LoadProteinData();
+        await modal.CloseModal();
+        StateHasChanged();
+    }
+
+    private async Task HandleModalStateChange(bool isOpen)
+    {
+        if (isOpen)
+        {
+            newProtein = new ProteinData();
+        }
+        else
+        {
+            newProtein = new ProteinData();
+        }
+
+    }
+
+    //OpenDoiInNewTab
+    private async Task OpenDoiInNewTab(string doi)
+    {
+        if (!string.IsNullOrWhiteSpace(doi))
+        {
+            var url = $"https://doi.org/{doi}";
+            await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+        }
+    }
+
+
+    private async Task ExportToCSV()
+    {
+        // Transform protein data to CSV format
+        var csvData = new StringBuilder();
+        csvData.AppendLine("Protein ID,Classification,Software Name,Software Version,Water Model,Force Field,SimulationMethod,Temperature,Ions,Ion Concentration,Simulation Length");
+        foreach (var protein in filteredProteinData)
+        {
+            csvData.AppendLine($"{protein.ProteinId},{protein.Classification},{protein.SoftwareName},{protein.SoftwareVersion}," +
+                               $"{protein.WaterModel},{protein.ForceField},{protein.SimulationMethod},{protein.Temperature}," +
+                               $"{protein.Ions},{protein.IonConcentration},{protein.SimulationLength}");
+        }
+
+        // Use JavaScript interop to download the CSV file
+        var csvContent = csvData.ToString();
+        var fileName = "protein_data.csv";
+        var mimeType = "text/csv";
+
+        await JSRuntime.InvokeVoidAsync("downloadFileFromText", fileName, csvContent, mimeType);
+    }
+}

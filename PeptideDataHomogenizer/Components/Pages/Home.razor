@@ -1,0 +1,187 @@
+﻿@page "/"
+@using System.Collections.Concurrent
+@using Entities
+@using PeptideDataHomogenizer.Components.SharedComponents
+@using PeptideDataHomogenizer.Data.State
+@using PeptideDataHomogenizer.State
+@using PeptideDataHomogenizer.Tools
+@using SuperSimpleBlazorModal
+@rendermode InteractiveServer
+@inject IFullArticleDownloader FullArticleDownloader
+@inject ArticleBrowserState State
+@inject IJSRuntime JSRuntime
+
+<PageTitle>PubMed Article Browser</PageTitle>
+
+<div class="container mt-4">
+    <h1 class="text-center mb-4">Article Browser</h1>
+
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <label for="queryInput" class="form-label">Search Query</label>
+            <input id="queryInput" class="form-control" @bind="query" placeholder="Enter search query" />
+        </div>
+        <div class="col-md-4">
+            <label for="pageSizeInput" class="form-label">Page Size</label>
+            <input id="pageSizeInput" type="number" class="form-control" @bind="pageSize" min="1" />
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+            <button class="btn btn-primary w-100" @onclick="()=>SearchArticles(true)">Search</button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-progress">
+            <div class="spinner"></div>
+            <p>Loading articles...</p>
+        </div>
+    }
+    else if (errorMessage != null)
+    {
+        <div class="alert alert-danger">
+            @errorMessage
+            <button class="btn btn-sm btn-secondary" @onclick="Reload">Retry</button>
+        </div>
+    }
+    else if (CurrentArticles != null)
+    {
+        <ArticlesTable Articles="CurrentArticles" />
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <button class="btn btn-outline-primary" @onclick="PreviousPage" disabled="@(!CanGoToPreviousPage)">← Previous</button>
+            <span>Page @pageNr of @TotalPages</span>
+            <button class="btn btn-outline-primary" @onclick="NextPage">Next →</button>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = false;
+    private string? errorMessage;
+    private string query = "prion protein molecular dynamics simulation";
+    private int pageNr => State.PageNr;
+    private int pageSize = 15;
+
+    private bool CanGoToPreviousPage => pageNr > 1;
+
+    private List<Article>? CurrentArticles => 
+        State.ArticlesByPage.TryGetValue(pageNr, out var articles) ? articles : null;
+
+    private int TotalPages => State.ArticlesByPage.Keys.Count > 0 ? State.ArticlesByPage.Keys.Max() : 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize from State if available
+            if (!string.IsNullOrEmpty(State.CurrentQuery))
+                query = State.CurrentQuery;
+
+            if (State.PageSize > 0)
+                pageSize = State.PageSize;
+
+            if (State.PageNr == 0)
+                State.PageNr = 1;
+
+            // Load current page if cached
+            if (State.ArticlesByPage.ContainsKey(pageNr))
+            {
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SearchArticles(bool forceReload)
+    {
+        if (string.IsNullOrEmpty(query))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Query field cannot be empty.");
+            return;
+        }
+
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            if (forceReload)
+            {
+                State.ArticlesByPage.Clear();
+                State.CurrentQuery = query;
+                State.PageSize = pageSize;
+                State.PageNr = 1; // Reset to first page on new search
+            }
+
+            await LoadPage(pageNr);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadPage(int page)
+    {
+        isLoading = true;
+        // Return cached data if available
+        if (State.ArticlesByPage.ContainsKey(page)){
+            isLoading = false;
+            return;
+        }
+
+        // Otherwise fetch new data
+        var articles = await FullArticleDownloader.GetArticlesFromPubMedQuerySequential(
+            query, page, pageSize);
+
+        if (articles != null)
+        {
+            State.ArticlesByPage[page] = articles;
+        }
+
+        
+        isLoading = false;
+    }
+
+    private async Task Reload()
+    {
+        await SearchArticles(true);
+    }
+
+    private async Task PreviousPage()
+    {
+        if (CanGoToPreviousPage)
+        {
+            State.PageNr--;
+            await LoadPage(pageNr);
+            StateHasChanged();
+        }
+    }
+
+    private async Task NextPage()
+    {
+        State.PageNr++;
+        await LoadPage(pageNr);
+        StateHasChanged();
+        
+    }
+}
+
+<style>
+   
+
+   /* Table hover */
+   .clickable-row {
+       cursor: pointer;
+       transition: background-color 0.2s;
+   }
+
+   .clickable-row:hover {
+       background-color: #f8f9fa;
+   }
+</style>

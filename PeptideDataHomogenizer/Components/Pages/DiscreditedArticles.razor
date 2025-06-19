@@ -1,0 +1,33 @@
+﻿@page "/discredited-articles"
+
+
+@using Entities  
+@using PeptideDataHomogenizer.Data  
+@inject DatabaseDataHandler DatabaseDataHandler  
+@rendermode InteractiveServer
+
+@if (Articles == null)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading articles...</p>
+    </div>
+}
+else{
+    <PeptideDataHomogenizer.Components.SharedComponents.DiscreditedArticlesComponent Articles="Articles" DatabaseDataHandler="DatabaseDataHandler" />  
+}
+@code {  
+
+    private List<Article> Articles;  
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)  
+    {  
+        if (firstRender)  
+        {  
+            Articles = await DatabaseDataHandler.GetDiscreditedArticlesAsync(true);  
+            StateHasChanged();  
+        }  
+    }  
+
+    
+}

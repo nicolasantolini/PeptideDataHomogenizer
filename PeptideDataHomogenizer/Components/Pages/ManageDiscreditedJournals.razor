@@ -1,0 +1,197 @@
+﻿@page "/manage-discredited-journals"
+@using Entities
+@using PeptideDataHomogenizer.Data
+@using SuperSimpleBlazorModal
+@inject DatabaseDataHandler DatabaseDataHandler
+
+@rendermode InteractiveServer
+
+<h3 class="mb-4">Manage Discredited Journals</h3>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-light">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Journal List</h5>
+            <button class="btn btn-primary btn-sm" @onclick="ShowAddModal">
+                <i class="bi bi-plus-lg"></i> Add Journal
+            </button>
+        </div>
+    </div>
+
+    <div class="card-body">
+        @if (journals == null)
+        {
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else if (!journals.Any())
+        {
+            <div class="alert alert-info">
+                No discredited journals found. Add one to get started.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Journal Title</th>
+                            <th width="120px">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var journal in journals)
+                        {
+                            <tr>
+                                <td>@journal.Title</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary me-1"
+                                            @onclick="() => ShowEditModal(journal)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => ShowDeleteModal(journal)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<SimpleModal @ref="journalModalRef"
+                Id="journal-modal"
+                ExtraCssClass=""
+                OpenOnFirstRender="false">
+    <div class="modal-header">
+        <h5 class="modal-title">@(isEditing ? "Edit Journal" : "Add New Journal")</h5>
+        <button type="button" class="btn-close" @onclick="CloseJournalModal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <EditForm Model="currentJournal" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label for="journalTitle" class="form-label">Journal Title *</label>
+                <InputText id="journalTitle" class="form-control" @bind-Value="currentJournal.Title" />
+                <ValidationMessage For="@(() => currentJournal.Title)" />
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" @onclick="CloseJournalModal">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    @(isEditing ? "Update" : "Save")
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</SimpleModal>
+
+<SimpleModal @ref="deleteModalRef"
+                Id="delete-modal"
+                ExtraCssClass=""
+                OpenOnFirstRender="false">
+    <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Confirm Deletion</h5>
+        <button type="button" class="btn-close btn-close-white" @onclick="CloseDeleteModal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <p>Are you sure you want to delete the journal <strong>@journalToDelete?.Title</strong>?</p>
+        <p class="text-danger">This action cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+        <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Delete</button>
+    </div>
+</SimpleModal>
+
+@code {
+    private List<DiscreditedJournal> journals;
+    private DiscreditedJournal currentJournal = new();
+    private DiscreditedJournal journalToDelete;
+    private bool isEditing;
+    private string originalTitle;
+
+    private SimpleModal journalModalRef;
+    private SimpleModal deleteModalRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJournals();
+    }
+
+    private async Task LoadJournals()
+    {
+        journals = await DatabaseDataHandler.GetAllAsync<DiscreditedJournal>();
+    }
+
+    private void ShowAddModal()
+    {
+        isEditing = false;
+        currentJournal = new DiscreditedJournal();
+        journalModalRef?.ShowModal();
+    }
+
+    private void ShowEditModal(DiscreditedJournal journal)
+    {
+        isEditing = true;
+        originalTitle = journal.Title;
+        currentJournal = new DiscreditedJournal { Title = journal.Title };
+        journalModalRef?.ShowModal();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (isEditing)
+        {
+            // Find the original journal by title, update and save
+            var existing = await DatabaseDataHandler.GetByIdAsync<DiscreditedJournal>(originalTitle);
+            if (existing != null)
+            {
+                existing.Title = currentJournal.Title;
+                await DatabaseDataHandler.UpdateAsync(existing);
+            }
+        }
+        else
+        {
+            await DatabaseDataHandler.AddAsync(currentJournal);
+        }
+
+        await LoadJournals();
+        journalModalRef?.CloseModal();
+        StateHasChanged();
+    }
+
+    private void ShowDeleteModal(DiscreditedJournal journal)
+    {
+        journalToDelete = journal;
+        deleteModalRef?.ShowModal();
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (journalToDelete != null)
+        {
+            await DatabaseDataHandler.DeleteAsync<DiscreditedJournal>(journalToDelete);
+            await LoadJournals();
+        }
+        deleteModalRef?.CloseModal();
+        StateHasChanged();
+    }
+
+    private void CloseJournalModal()
+    {
+        journalModalRef?.CloseModal();
+    }
+
+    private void CloseDeleteModal()
+    {
+        deleteModalRef?.CloseModal();
+    }
+}

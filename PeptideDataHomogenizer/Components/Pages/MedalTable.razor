@@ -1,0 +1,327 @@
+﻿@page "/medal-table"
+@using System.Collections.Generic
+@using PeptideDataHomogenizer.Data
+
+@rendermode InteractiveServer
+@inject DatabaseDataHandler DatabaseDataHandler
+
+<div class="medal-collection-container">
+    <div class="header-section text-center mb-5">
+        <h1 class="display-4 mb-3">My Medal Collection</h1>
+        <p class="lead text-muted">Achievements unlocked through hard work and dedication</p>
+    </div>
+
+    <div class="container">
+        @foreach (var category in medalCategories)
+        {
+            <div class="medal-category-card mb-5">
+                <div class="category-header">
+                    <h2>@category.Name</h2>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar"
+                             style="width: @(category.CompletionPercentage)%"
+                             aria-valuenow="@category.CompletionPercentage"
+                             aria-valuemin="0"
+                             aria-valuemax="100"></div>
+                    </div>
+                </div>
+
+                <div class="medal-row">
+                    @foreach (var medal in category.Medals)
+                    {
+                        <div class="medal-item @(medal.IsUnlocked ? "unlocked" : "locked")">
+                            <img src="@(medal.ImageName)"
+                                 alt="@medal.Name"
+                                 class="medal-img" />
+                            <div class="medal-info">
+                                <h5>@medal.Name</h5>
+                                <p>@medal.Description</p>
+                                @if (medal.IsUnlocked)
+                                {
+                                    <span class="badge bg-success">Unlocked</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Locked</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+
+    private int approvedProteinsCount = 0;
+    private int totalDiscreditedItemsCount = 0;
+    private List<MedalCategory> medalCategories = new List<MedalCategory>();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+
+            medalCategories = new List<MedalCategory>();
+            string rootpath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images");
+            approvedProteinsCount = await DatabaseDataHandler.GetApprovedProteinsCountAsync();
+            totalDiscreditedItemsCount = await DatabaseDataHandler.GetDiscreditedCountsAsync();
+
+            medalCategories.Add(new MedalCategory
+            {
+                Name = "Protein Extractor",
+                CompletionPercentage = CalculateCompletionPercentage(approvedProteinsCount, 500), // Assuming 100 is the max for this category
+                Medals = new List<Medal>
+        {
+            new Medal
+            {
+                Name = "Protein Pioneer",
+                ImageName = "images/bronze-extractor.png",
+                Description = "Unlocked after approving 100 proteins.",
+                IsUnlocked = approvedProteinsCount >= 100
+            },
+            new Medal
+            {
+                Name = "Protein Specialist",
+                ImageName = "images/silver-extractor.png",
+                Description = "Unlocked after approving 250 proteins.",
+                IsUnlocked = approvedProteinsCount >= 250
+            },
+            new Medal
+            {
+                Name = "Protein Master",
+                ImageName = "images/gold-extractor.png",
+                Description = "Unlocked after approving 500 proteins.",
+                IsUnlocked = approvedProteinsCount >= 500
+            }
+        }
+            });
+
+            medalCategories.Add(new MedalCategory
+            {
+                Name = "Discredited Items",
+                CompletionPercentage = CalculateCompletionPercentage(totalDiscreditedItemsCount, 100), // Assuming 100 is the max for this category
+                Medals = new List<Medal>
+            {
+                new Medal
+                {
+                    Name = "Discredited Detective",
+                    ImageName = "images/bronze-discreditor.png",
+                    Description = "Unlocked after discrediting 10 items.",
+                    IsUnlocked = totalDiscreditedItemsCount >= 10
+                },
+                new Medal
+                {
+                    Name = "Discredited Expert",
+                    ImageName = "images/silver-discreditor.png",
+                    Description = "Unlocked after discrediting 50 items.",
+                    IsUnlocked = totalDiscreditedItemsCount >= 50
+                },
+                new Medal
+                {
+                    Name = "Discredited Authority",
+                    ImageName = "images/gold-discreditor.png",
+                    Description = "Unlocked after discrediting 100 items.",
+                    IsUnlocked = totalDiscreditedItemsCount >= 100
+                }
+            }
+            });
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private int CalculateCompletionPercentage(int currentCount, int maxCount)
+    {
+        if (maxCount == 0) return 0;
+        return (int)((double)currentCount / maxCount * 100);
+    }
+
+
+    public class MedalCategory
+    {
+        public string Name { get; set; }
+        public int CompletionPercentage { get; set; }
+        public List<Medal> Medals { get; set; }
+    }
+
+    public class Medal
+    {
+        public string Name { get; set; }
+        public string ImageName { get; set; }
+        public string Description { get; set; }
+        public bool IsUnlocked { get; set; }
+    }
+}
+
+<style>
+
+    .medal-collection-container {
+        min-height: 100vh;
+        padding: 2rem 0;
+    }
+
+    .header-section {
+        animation: fadeIn 1s ease-in-out;
+    }
+
+    .medal-category-card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        padding: 2rem;
+        margin-bottom: 2rem;
+        transition: transform 0.3s ease;
+    }
+
+        .medal-category-card:hover {
+            transform: translateY(-5px);
+        }
+
+    .category-header {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #eee;
+    }
+
+        .category-header h2 {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+
+    .progress {
+        height: 8px;
+        border-radius: 4px;
+        background-color: #e9ecef;
+        margin-top: 1rem;
+    }
+
+    .progress-bar {
+        background: linear-gradient(90deg, #3498db, #2ecc71);
+    }
+
+    .medal-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .medal-item {
+        background: #fff;
+        border-radius: 10px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .medal-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .medal-item.locked {
+            opacity: 0.6;
+        }
+
+            .medal-item.locked .medal-img {
+                filter: grayscale(80%);
+            }
+
+    .medal-img {
+        width: 200px;
+        height: 200px;
+        object-fit: contain;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .medal-item:hover .medal-img {
+        transform: scale(1.1);
+    }
+
+    .medal-info h5 {
+        color: #2c3e50;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .medal-info p {
+        color: #7f8c8d;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+
+    /* Animation for unlocked medals */
+    @@keyframes pulse {
+        0% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.05);
+        }
+
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    .medal-item.unlocked {
+        animation: pulse 2s infinite;
+    }
+
+        .medal-item.unlocked::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            border: 2px solid rgba(46, 204, 113, 0.3);
+            border-radius: 15px;
+            animation: borderPulse 3s infinite;
+            pointer-events: none;
+        }
+
+    @@keyframes borderPulse {
+        0% {
+            opacity: 0.3;
+        }
+
+        50% {
+            opacity: 0.8;
+        }
+
+        100% {
+            opacity: 0.3;
+        }
+    }
+
+    /* Responsive adjustments */
+    @@media (max-width: 768px) {
+        .medal-row {
+            grid-template-columns: 1fr;
+        }
+
+        .header-section h1 {
+            font-size: 2rem;
+        }
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+</style>

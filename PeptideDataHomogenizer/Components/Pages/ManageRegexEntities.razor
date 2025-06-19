@@ -1,0 +1,655 @@
+﻿@page "/manage-regex-entities"
+@using Entities
+@using Entities.RegexData
+@using PeptideDataHomogenizer.Data
+@using SuperSimpleBlazorModal
+@inject DatabaseDataHandler DatabaseDataHandler
+
+@rendermode InteractiveServer
+
+<h3 class="mb-4">Manage Simulation Parameters</h3>
+
+<div class="accordion" id="entitiesAccordion">
+    <!-- Force Field Software -->
+    <div class="accordion-item shadow-sm mb-3">
+        <h2 class="accordion-header">
+            <button class="accordion-button bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#forceFieldSection">
+                <i class="bi bi-cpu me-2"></i> Force Field Software
+            </button>
+        </h2>
+        <div id="forceFieldSection" class="accordion-collapse collapse show" data-bs-parent="#entitiesAccordion">
+            <div class="accordion-body p-0">
+                @if (forceFieldSoftware == null)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (!forceFieldSoftware.Any())
+                {
+                    <div class="alert alert-info m-3">
+                        No force field software found.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Software Name</th>
+                                    <th width="120px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in forceFieldSoftware.OrderBy(x => x.SoftwareName))
+                                {
+                                    <tr>
+                                        <td>@item.SoftwareName</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                                    @onclick="() => ShowEditModal(item)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => ShowDeleteModal(item, ForceFieldSoftwareType)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(ForceFieldSoftwareType)">
+                        <i class="bi bi-plus-lg"></i> Add Software
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simulation Methods -->
+    <div class="accordion-item shadow-sm mb-3">
+        <h2 class="accordion-header">
+            <button class="accordion-button bg-light collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#methodsSection">
+                <i class="bi bi-gear-wide-connected me-2"></i> Simulation Methods
+            </button>
+        </h2>
+        <div id="methodsSection" class="accordion-collapse collapse" data-bs-parent="#entitiesAccordion">
+            <div class="accordion-body p-0">
+                @if (simulationMethods == null)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (!simulationMethods.Any())
+                {
+                    <div class="alert alert-info m-3">
+                        No simulation methods found.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Method Name</th>
+                                    <th width="120px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in simulationMethods.OrderBy(x => x.MethodName))
+                                {
+                                    <tr>
+                                        <td>@item.MethodName</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                                    @onclick="() => ShowEditModal(item)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => ShowDeleteModal(item,SimulationMethodType)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(SimulationMethodType)">
+                        <i class="bi bi-plus-lg"></i> Add Method
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simulation Software -->
+    <div class="accordion-item shadow-sm mb-3">
+        <h2 class="accordion-header">
+            <button class="accordion-button bg-light collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#softwareSection">
+                <i class="bi bi-pc-display-horizontal me-2"></i> Simulation Software
+            </button>
+        </h2>
+        <div id="softwareSection" class="accordion-collapse collapse" data-bs-parent="#entitiesAccordion">
+            <div class="accordion-body p-0">
+                @if (simulationSoftware == null)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (!simulationSoftware.Any())
+                {
+                    <div class="alert alert-info m-3">
+                        No simulation software found.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Software Name</th>
+                                    <th width="120px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in simulationSoftware.OrderBy(x => x.SoftwareName))
+                                {
+                                    <tr>
+                                        <td>@item.SoftwareName</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                                    @onclick="() => ShowEditModal(item)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => ShowDeleteModal(item,SimulationSoftwareType)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(SimulationSoftwareType)">
+                        <i class="bi bi-plus-lg"></i> Add Software
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Water Models -->
+    <div class="accordion-item shadow-sm mb-3">
+        <h2 class="accordion-header">
+            <button class="accordion-button bg-light collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#waterModelsSection">
+                <i class="bi bi-droplet me-2"></i> Water Models
+            </button>
+        </h2>
+        <div id="waterModelsSection" class="accordion-collapse collapse" data-bs-parent="#entitiesAccordion">
+            <div class="accordion-body p-0">
+                @if (waterModels == null)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (!waterModels.Any())
+                {
+                    <div class="alert alert-info m-3">
+                        No water models found.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Model Name</th>
+                                    <th>Type</th>
+                                    <th width="120px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var group in waterModels.GroupBy(x => x.WaterModelType).OrderBy(g => g.Key))
+                                {
+                                    <tr class="table-group-divider">
+                                        <td colspan="3" class="fw-bold bg-light">@group.Key</td>
+                                    </tr>
+                                    @foreach (var item in group.OrderBy(x => x.WaterModelName))
+                                    {
+                                        <tr>
+                                            <td>@item.WaterModelName</td>
+                                            <td>@item.WaterModelType</td>
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                        @onclick="() => ShowEditModal(item)">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        @onclick="() => ShowDeleteModal(item,WaterModelType)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(WaterModelType)">
+                        <i class="bi bi-plus-lg"></i> Add Water Model
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Ions -->
+    <div class="accordion-item shadow-sm mb-3">
+        <h2 class="accordion-header">
+            <button class="accordion-button bg-light collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#ionsSection">
+                <i class="bi bi-lightning-charge me-2"></i> Ions
+            </button>
+        </h2>
+        <div id="ionsSection" class="accordion-collapse collapse" data-bs-parent="#entitiesAccordion">
+            <div class="accordion-body p-0">
+                @if (ions == null)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (!ions.Any())
+                {
+                    <div class="alert alert-info m-3">
+                        No ions found.
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ion Name</th>
+                                    <th width="120px">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in ions.OrderBy(x => x.IonName))
+                                {
+                                    <tr>
+                                        <td>@item.IonName</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary me-1"
+                                                    @onclick="() => ShowEditModal(item)">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger"
+                                                    @onclick="() => ShowDeleteModal(item, IonType)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                <div class="d-flex justify-content-end mt-3">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(IonType)">
+                        <i class="bi bi-plus-lg"></i> Add Ion
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shared Modal Component -->
+<SimpleModal @ref="modalRef"
+             Id="entity-modal"
+             ExtraCssClass=""
+             OpenOnFirstRender="false">
+    <div class="modal-header">
+        <h5 class="modal-title">@modalTitle</h5>
+        <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <EditForm Model="@(currentEntityType == ForceFieldSoftwareType ? currentForceFieldSoftware :
+                                    currentEntityType == SimulationMethodType ? currentSimulationMethod :
+                                    currentEntityType == SimulationSoftwareType ? currentSimulationSoftware :
+                                    currentEntityType == WaterModelType ? currentWaterModel :
+                                    currentEntityType == IonType ? currentIon : null)"
+                  OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            @if (currentEntityType == WaterModelType)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Water Model Name *</label>
+                    <InputText class="form-control" @bind-Value="currentWaterModel.WaterModelName" />
+                    <ValidationMessage For="@(() => currentWaterModel.WaterModelName)" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Water Model Type *</label>
+                    <InputSelect class="form-select" @bind-Value="currentWaterModel.WaterModelType">
+                        <option value="implicit">Implicit</option>
+                        <option value="explicit">Explicit</option
+                    </InputSelect>
+                </div>
+            }
+            else if (currentEntityType == ForceFieldSoftwareType)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Software Name *</label>
+                    <InputText class="form-control" @bind-Value="currentForceFieldSoftware.SoftwareName" />
+                    <ValidationMessage For="@(() => currentForceFieldSoftware.SoftwareName)" />
+                </div>
+            }
+            else if (currentEntityType == SimulationMethodType)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Method Name *</label>
+                    <InputText class="form-control" @bind-Value="currentSimulationMethod.MethodName" />
+                    <ValidationMessage For="@(() => currentSimulationMethod.MethodName)" />
+                </div>
+            }
+            else if (currentEntityType == SimulationSoftwareType)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Software Name *</label>
+                    <InputText class="form-control" @bind-Value="currentSimulationSoftware.SoftwareName" />
+                    <ValidationMessage For="@(() => currentSimulationSoftware.SoftwareName)" />
+                </div>
+            }
+            else if (currentEntityType == IonType)
+            {
+                <div class="mb-3">
+                    <label class="form-label">Ion *</label>
+                    <InputText class="form-control" @bind-Value="currentIon.IonName" />
+                    <ValidationMessage For="@(() => currentIon.IonName)" />
+                </div>
+            }
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                <button type="submit" class="btn btn-primary">@(isEditing ? "Update" : "Save")</button>
+            </div>
+        </EditForm>
+    </div>
+</SimpleModal>
+
+<!-- Delete Confirmation Modal -->
+<SimpleModal @ref="deleteModalRef"
+             Id="delete-modal"
+             ExtraCssClass=""
+             OpenOnFirstRender="false">
+    <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Confirm Deletion</h5>
+        <button type="button" class="btn-close btn-close-white" @onclick="CloseDeleteModal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <p>Are you sure you want to delete <strong>@itemToDeleteName</strong>?</p>
+        <p class="text-danger">This action cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+        <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Delete</button>
+    </div>
+</SimpleModal>
+
+@code {
+    // Entity type string constants
+    private const string ForceFieldSoftwareType = "ForceFieldSoftware";
+    private const string SimulationMethodType = "SimulationMethod";
+    private const string SimulationSoftwareType = "SimulationSoftware";
+    private const string WaterModelType = "WaterModel";
+    private const string IonType = "Ion"; 
+
+    // Lists for each entity type
+    private List<ForceFieldSoftware> forceFieldSoftware;
+    private List<SimulationMethod> simulationMethods;
+    private List<SimulationSoftware> simulationSoftware;
+    private List<WaterModel> waterModels;
+    private List<Ion> ions;
+
+    // Modal state
+    private SimpleModal modalRef;
+    private SimpleModal deleteModalRef;
+    private string modalTitle = "";
+    private bool isEditing;
+
+    private ForceFieldSoftware currentForceFieldSoftware = new ForceFieldSoftware();
+    private SimulationMethod currentSimulationMethod = new SimulationMethod();
+    private SimulationSoftware currentSimulationSoftware = new SimulationSoftware();
+    private WaterModel currentWaterModel = new WaterModel();
+    private Ion currentIon = new Ion(); 
+
+    private string currentEntityType = ForceFieldSoftwareType; // Default entity type
+
+    // For delete modal
+    private object itemToDelete;
+    private string itemToDeleteName;
+    private string entityTypeToDelete;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender)
+        {
+            await LoadAllData();
+            StateHasChanged(); // Ensure the UI updates after loading data
+        }
+    }
+
+    private async Task LoadAllData()
+    {
+        forceFieldSoftware = (await DatabaseDataHandler.GetAllAsync<ForceFieldSoftware>()).OrderBy(x => x.SoftwareName).ToList();
+        simulationMethods = (await DatabaseDataHandler.GetAllAsync<SimulationMethod>()).OrderBy(x => x.MethodName).ToList();
+        simulationSoftware = (await DatabaseDataHandler.GetAllAsync<SimulationSoftware>()).OrderBy(x => x.SoftwareName).ToList();
+        waterModels = (await DatabaseDataHandler.GetAllAsync<WaterModel>()).OrderBy(x => x.WaterModelName).ToList();
+        ions = (await DatabaseDataHandler.GetAllAsync<Ion>()).OrderBy(x => x.IonName).ToList(); // Load ions if needed
+    }
+
+    private void ShowAddModal(string entityType)
+    {
+        isEditing = false;
+        currentEntityType = entityType;
+
+        switch (entityType)
+        {
+            case ForceFieldSoftwareType:
+                currentForceFieldSoftware = new ForceFieldSoftware();
+                break;
+            case SimulationMethodType:
+                currentSimulationMethod = new SimulationMethod();
+                break;
+            case SimulationSoftwareType:
+                currentSimulationSoftware = new SimulationSoftware();
+                break;
+            case WaterModelType:
+                currentWaterModel = new WaterModel();
+                break;
+            case IonType:
+                currentIon = new Ion(); // Initialize Ion if needed
+                break;
+        }
+
+        modalTitle = $"Add {entityType}";
+        modalRef?.ShowModal();
+    }
+
+    private void ShowEditModal(object item)
+    {
+        isEditing = true;
+        switch (item)
+        {
+            case ForceFieldSoftware ffs:
+                currentEntityType = ForceFieldSoftwareType;
+                currentForceFieldSoftware = ffs;
+                break;
+            case SimulationMethod sm:
+                currentEntityType = SimulationMethodType;
+                currentSimulationMethod = sm;
+                break;
+            case SimulationSoftware ss:
+                currentEntityType = SimulationSoftwareType;
+                currentSimulationSoftware = ss;
+                break;
+            case WaterModel wm:
+                currentEntityType = WaterModelType;
+                currentWaterModel = wm;
+                break;
+            case Ion ion:
+                currentEntityType = IonType; // Set to Ion type if needed
+                currentIon = ion; // Initialize Ion if needed
+                break;
+        }
+        modalTitle = $"Edit {item?.GetType().Name ?? "Entity"}";
+        modalRef?.ShowModal();
+    }
+
+    private void ShowDeleteModal(object item, string entityType)
+    {
+        entityTypeToDelete = entityType;
+        itemToDelete = item;
+
+        switch (item)
+        {
+            case ForceFieldSoftware ffs:
+                itemToDeleteName = ffs.SoftwareName;
+                break;
+            case SimulationMethod sm:
+                itemToDeleteName = sm.MethodName;
+                break;
+            case SimulationSoftware ss:
+                itemToDeleteName = ss.SoftwareName;
+                break;
+            case WaterModel wm:
+                itemToDeleteName = wm.WaterModelName;
+                break;
+            case Ion ion:
+                itemToDeleteName = ion.IonName; // Assuming Ion has a property IonName
+                break;
+            default:
+                itemToDeleteName = "Unknown";
+                break;
+        }
+
+        deleteModalRef?.ShowModal();
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (itemToDelete == null)
+        {
+            CloseDeleteModal();
+            return;
+        }
+
+        switch (entityTypeToDelete)
+        {
+            case ForceFieldSoftwareType:
+                await DatabaseDataHandler.DeleteAsync((ForceFieldSoftware)itemToDelete);
+                break;
+            case SimulationMethodType:
+                await DatabaseDataHandler.DeleteAsync((SimulationMethod)itemToDelete);
+                break;
+            case SimulationSoftwareType:
+                await DatabaseDataHandler.DeleteAsync((SimulationSoftware)itemToDelete);
+                break;
+            case WaterModelType:
+                await DatabaseDataHandler.DeleteAsync((WaterModel)itemToDelete);
+                break;
+            case IonType:
+                await DatabaseDataHandler.DeleteAsync((Ion)itemToDelete); // Assuming Ion has a Delete method
+                break;
+        }
+
+        Console.WriteLine($"Deleted {entityTypeToDelete} - {itemToDeleteName}");
+
+        await LoadAllData();
+        CloseDeleteModal();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        switch (currentEntityType)
+        {
+            case ForceFieldSoftwareType:
+                if (isEditing)
+                    await DatabaseDataHandler.UpdateAsync(currentForceFieldSoftware);
+                else
+                    await DatabaseDataHandler.AddAsync(currentForceFieldSoftware);
+                break;
+            case SimulationMethodType:
+                if (isEditing)
+                    await DatabaseDataHandler.UpdateAsync(currentSimulationMethod);
+                else
+                    await DatabaseDataHandler.AddAsync(currentSimulationMethod);
+                break;
+            case SimulationSoftwareType:
+                if (isEditing)
+                    await DatabaseDataHandler.UpdateAsync(currentSimulationSoftware);
+                else
+                    await DatabaseDataHandler.AddAsync(currentSimulationSoftware);
+                break;
+            case WaterModelType:
+                if (isEditing)
+                    await DatabaseDataHandler.UpdateAsync(currentWaterModel);
+                else
+                    await DatabaseDataHandler.AddAsync(currentWaterModel);
+                break;
+            case IonType:
+                if (isEditing)
+                    await DatabaseDataHandler.UpdateAsync(currentIon); // Assuming Ion has an Update method
+                else
+                    await DatabaseDataHandler.AddAsync(currentIon); // Assuming Ion has an Add method
+                break;
+        }
+
+        //print operation log to console
+        await LoadAllData();
+        CloseModal();
+    }
+
+    private void CloseModal()
+    {
+        modalRef?.CloseModal();
+    }
+
+    private void CloseDeleteModal()
+    {
+        deleteModalRef?.CloseModal();
+        itemToDelete = null;
+        itemToDeleteName = null;
+        entityTypeToDelete = null;
+    }
+}

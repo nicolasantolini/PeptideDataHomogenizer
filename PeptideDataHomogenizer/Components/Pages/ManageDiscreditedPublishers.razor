@@ -1,0 +1,203 @@
+﻿@page "/manage-discredited-publishers"
+@using Entities
+@using PeptideDataHomogenizer.Data
+@using SuperSimpleBlazorModal
+@inject DatabaseDataHandler DatabaseDataHandler
+
+@rendermode InteractiveServer
+
+<h3 class="mb-4">Manage Discredited Publishers</h3>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-light">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Publisher List</h5>
+            <button class="btn btn-primary btn-sm" @onclick="ShowAddModal">
+                <i class="bi bi-plus-lg"></i> Add Publisher
+            </button>
+        </div>
+    </div>
+
+    <div class="card-body">
+        @if (publishers == null)
+        {
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else if (!publishers.Any())
+        {
+            <div class="alert alert-info">
+                No discredited publishers found. Add one to get started.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Publisher URL</th>
+                            <th width="120px">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var publisher in publishers)
+                        {
+                            <tr>
+                                <td>@publisher.Id</td>
+                                <td>@publisher.Url</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary me-1"
+                                            @onclick="() => ShowEditModal(publisher)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="() => ShowDeleteModal(publisher)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<SimpleModal @ref="publisherModalRef"
+             Id="publisher-modal"
+             ExtraCssClass=""
+             OpenOnFirstRender="false">
+    <div class="modal-header">
+        <h5 class="modal-title">@(isEditing ? "Edit Publisher" : "Add New Publisher")</h5>
+        <button type="button" class="btn-close" @onclick="ClosePublisherModal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <EditForm Model="currentPublisher" OnValidSubmit="HandleValidSubmit">
+            <DataAnnotationsValidator />
+            <div class="mb-3">
+                <label for="publisherUrl" class="form-label">Publisher URL *</label>
+                <InputText id="publisherUrl" class="form-control" @bind-Value="currentPublisher.Url" />
+                <ValidationMessage For="@(() => currentPublisher.Url)" />
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" @onclick="ClosePublisherModal">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    @(isEditing ? "Update" : "Save")
+                </button>
+            </div>
+        </EditForm>
+    </div>
+</SimpleModal>
+
+<SimpleModal @ref="deleteModalRef"
+             Id="delete-modal"
+             ExtraCssClass=""
+             OpenOnFirstRender="false">
+    <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Confirm Deletion</h5>
+        <button type="button" class="btn-close btn-close-white" @onclick="CloseDeleteModal" aria-label="Close"></button>
+    </div>
+    <div class="modal-body">
+        <p>Are you sure you want to delete the publisher <strong>@publisherToDelete?.Url</strong>?</p>
+        <p class="text-danger">This action cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+        <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Delete</button>
+    </div>
+</SimpleModal>
+
+@code {
+    private List<DiscreditedPublisher> publishers;
+    private DiscreditedPublisher currentPublisher = new();
+    private DiscreditedPublisher publisherToDelete;
+    private bool isEditing;
+    private int originalId;
+
+    private SimpleModal publisherModalRef;
+    private SimpleModal deleteModalRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPublishers();
+    }
+
+    private async Task LoadPublishers()
+    {
+        publishers = await DatabaseDataHandler.GetAllAsync<DiscreditedPublisher>();
+    }
+
+    private void ShowAddModal()
+    {
+        isEditing = false;
+        currentPublisher = new DiscreditedPublisher();
+        publisherModalRef?.ShowModal();
+    }
+
+    private void ShowEditModal(DiscreditedPublisher publisher)
+    {
+        isEditing = true;
+        originalId = publisher.Id;
+        currentPublisher = new DiscreditedPublisher
+        {
+            Id = publisher.Id,
+            Url = publisher.Url
+        };
+        publisherModalRef?.ShowModal();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (isEditing)
+        {
+            // Find the original publisher by ID, update and save
+            var existing = await DatabaseDataHandler.GetByIdAsync<DiscreditedPublisher>(originalId);
+            if (existing != null)
+            {
+                existing.Url = currentPublisher.Url;
+                await DatabaseDataHandler.UpdateAsync(existing);
+            }
+        }
+        else
+        {
+            await DatabaseDataHandler.AddAsync(currentPublisher);
+        }
+
+        await LoadPublishers();
+        publisherModalRef?.CloseModal();
+        StateHasChanged();
+    }
+
+    private void ShowDeleteModal(DiscreditedPublisher publisher)
+    {
+        publisherToDelete = publisher;
+        deleteModalRef?.ShowModal();
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (publisherToDelete != null)
+        {
+            await DatabaseDataHandler.DeleteAsync<DiscreditedPublisher>(publisherToDelete);
+            await LoadPublishers();
+        }
+        deleteModalRef?.CloseModal();
+        StateHasChanged();
+    }
+
+    private void ClosePublisherModal()
+    {
+        publisherModalRef?.CloseModal();
+    }
+
+    private void CloseDeleteModal()
+    {
+        deleteModalRef?.CloseModal();
+    }
+}

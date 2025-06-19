@@ -1,0 +1,87 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["PeptideDataHomogenizer.styles.css"]" />
+
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <!-- wwwroot/index.html or Pages/_Layout.cshtml -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="_content/Blazor.IndexedDB/indexedDb.Blazor.js"></script>
+
+    <ImportMap />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+    <script src="_framework/blazor.web.js"></script>
+
+    <script>
+        window.scrollToHighlight = function(index) {
+            const activeElement = document.querySelector(`.highlight-active[data-index="${index}"]`);
+            if (activeElement) {
+                activeElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+        };
+    </script>
+
+    <script>
+        window.downloadFileFromText = function(fileName, text, mimeType) {
+            const blob = new Blob([text], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+    </script>
+
+    <script>
+            window.methods = {
+                    CreateCookie: function (name, value, days) {
+                var expires = "";
+                if (days) {
+                    var date = new Date();
+                    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+                    expires = "; expires=" + date.toUTCString();
+                }
+
+                var secureFlag = window.location.protocol === 'https:' ? "; Secure" : "";
+
+                // Critical additions:
+                document.cookie = `${name}=${encodeURIComponent(value)}` +
+                                  `${expires}` +
+                                  "; path=/" +
+                                  "; SameSite=Lax" +
+                                  `${secureFlag}`;
+            },
+            GetCookie: function (name) {
+                var nameEQ = name + "=";
+                var ca = document.cookie.split(';');
+                for (var i = 0; i < ca.length; i++) {
+                    var c = ca[i];
+                    while (c.charAt(0) == ' ') c = c.substring(1);
+                    if (c.indexOf(nameEQ) == 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));  // Decode the value when retrieving
+                }
+                return "";
+            }
+        }
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,145 @@
+﻿@using System.Linq
+@using Entities
+
+<div class="text-center my-3">
+    @if (Articles != null && Articles.Any())
+    {
+        var totalArticles = Articles.Count;
+        var articlesWithValidFullText = Articles.Count(article => HasLargeFullText(article));
+        var proportion = (double)articlesWithValidFullText / totalArticles * 100;
+
+        <p class="alert alert-info">
+            <strong>@articlesWithValidFullText</strong> out of <strong>@totalArticles</strong> articles 
+            have valid full text (<strong>@proportion.ToString("0.00")%</strong>).
+        </p>
+        //article with protein records
+        var articlesWithProteinRecords = Articles.Count(article => article.ProteinData != null && article.ProteinData.Any());
+        var proportionWithProteinRecords = (double)articlesWithProteinRecords / totalArticles * 100;
+        <p class="alert alert-info">
+            <strong>@articlesWithProteinRecords</strong> out of <strong>@totalArticles</strong> articles 
+            have protein records (<strong>@proportionWithProteinRecords.ToString("0.00")%</strong>).
+        </p>
+    }
+    else
+    {
+        <p class="alert alert-warning">No articles available to calculate proportions.</p>
+    }
+</div>
+
+<!-- Legend for table -->
+<div class="mb-3">
+    <strong>Legend:</strong>
+    <span style="background-color: #ffcccb; padding: 2px 6px; margin-left: 10px;">Discredited Articles</span>
+    <span style="background-color: #008000; color: white; padding: 2px 6px; margin-left: 10px;">Completed Articles</span>
+</div>
+
+<table class="table table-hover">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Journal</th>
+            <th>Authors</th>
+            <th>Date</th>
+            <th>DOI</th>
+            <td>Has Valid Full Text</td>
+            <td>Has Protein Records</td>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var article in (Articles ?? Enumerable.Empty<Article>())
+            .OrderBy(a => HasLargeFullText(a) ? 1 : 0))
+            {
+            <tr @onclick="async () => await ShowArticleDetails(article)"
+                class="clickable-row @(article.Discredited ? "discredited-row" : (article.Completed && !article.Discredited ? "completed-row" : ""))"
+                style="cursor: pointer;">
+                    <td>@article.Title</td>
+                    <td>@article.Journal</td>
+                    <td>@article.Authors</td>
+                    <td>@article.PublicationDate.ToShortDateString()</td>
+                    <td>@article.Doi</td>
+                    <td>
+                        @if (HasLargeFullText(article))
+                        {
+                            <span class="text-success">Yes</span>
+                        }
+                        else
+                        {
+                            <span class="text-danger">No</span>
+                        }
+                    </td>
+                    <td>
+                        @if (article.ProteinData != null && article.ProteinData.Any())
+                        {
+                            <span class="text-success">Yes</span>
+                        }
+                        else
+                        {
+                            <span class="text-danger">No</span>
+                        }
+                    </td>
+                </tr>
+            }
+    </tbody>
+</table>
+
+<ArticleDetailModal @ref="modalRef"
+Article="selectedArticle"
+OnModalStateChange="HandleModalStateChange" />
+
+<style>
+
+    .discredited-row td {
+        background-color: #ffcccb !important;
+    }
+
+    .completed-row td {
+        background-color: #008000 !important;
+        cursor: pointer;
+        color:white;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public List<Article>? Articles { get; set; }
+
+    private ArticleDetailModal? modalRef;
+    private Article? selectedArticle;
+
+    private string JoinAuthors(IEnumerable<AuthorInfo> authors)
+        => string.Join(", ", authors.Take(3).Select(a => a.LastName + " " + a.FirstName?.FirstOrDefault() + ".")) 
+           + (authors.Count() > 3 ? " et al." : "");
+
+    private string GetAbstractPreview(string? abstractText)
+        => abstractText?[..Math.Min(100, abstractText.Length)] + 
+           (abstractText?.Length > 100 ? "..." : "") ?? "No abstract available";
+
+    private bool HasLargeFullText(Article article)
+    {
+        if (article.Chapters == null)
+        {
+            return false;
+        }
+
+        var totalLength = article.Chapters.Sum(chapter => chapter.Content?.Length ?? 0);
+        return totalLength > 1000;
+    }
+
+    private async Task ShowArticleDetails(Article article)
+    {
+        selectedArticle = article;
+        if (modalRef != null)
+        {
+            await modalRef.Show();
+        }
+    }
+
+    private async Task HandleModalStateChange(bool isOpen)
+    {
+        if (!isOpen)
+        {
+            selectedArticle = null;
+            StateHasChanged();
+        }
+    }
+}
