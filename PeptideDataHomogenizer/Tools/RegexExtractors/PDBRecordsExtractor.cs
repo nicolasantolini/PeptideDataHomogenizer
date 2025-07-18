@@ -118,12 +118,15 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
             // Find all software and water models in the text
             var softwareSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var softwareVersionDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var waterModelSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var waterModelSet = new HashSet<(string, string)>(new TupleComparer());
+
+            
             var forceFieldSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var simulationMethodSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var temperaturesSet = new HashSet<double>();
             var ionsAndConcentrationsSet = new HashSet<(string Ion, double Concentration)>();
             var durationTimesSet = new HashSet<int>();
+            var residuesSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var seenSentences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -164,7 +167,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 {
                     var wmName = waterModel.WaterModelName ?? waterModel.WaterModelType;
                     if (!string.IsNullOrWhiteSpace(wmName))
-                        waterModelSet.Add(wmName);
+                        waterModelSet.Add((wmName,waterModel.WaterModelType));
                 }
 
 
@@ -252,6 +255,14 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                     }
                 }
 
+                var residues = FindResiduesInSentence(sentence);
+                foreach (var residue in residues)
+                {
+                    if (!string.IsNullOrWhiteSpace(residue) && !residuesSet.Contains(residue))
+                    {
+                        residuesSet.Add(residue);
+                    }
+                }
 
             }
 
@@ -259,7 +270,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
             if (softwareSet.Count == 0)
                 softwareSet.Add(null);
             if (waterModelSet.Count == 0)
-                waterModelSet.Add(null);
+                waterModelSet.Add((null,null));
             if (forceFieldSet.Count == 0)
                 forceFieldSet.Add(null);
             if (simulationMethodSet.Count == 0)
@@ -270,40 +281,48 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 ionsAndConcentrationsSet.Add(("", 0.0)); // Default ion if none found
             if (durationTimesSet.Count == 0)
                 durationTimesSet.Add(0); // Default duration if none found
+            if (residuesSet.Count == 0)
+                residuesSet.Add(null); // Default residue if none found
 
 
             // Build all combinations of ProteinId, Software, WaterModel
             var expandedList = new List<ProteinData>();
             foreach (var pd in proteinDataList)
             {
-                foreach (var software in softwareSet)
+                foreach (var residue in residuesSet)
                 {
-                    foreach (var waterModel in waterModelSet)
+                    foreach (var software in softwareSet)
                     {
-                        foreach (var forceField in forceFieldSet)
+                        foreach (var waterModel in waterModelSet)
                         {
-                            foreach (var method in simulationMethodSet)
+                            foreach (var forceField in forceFieldSet)
                             {
-                                foreach (var temperature in temperaturesSet)
+                                foreach (var method in simulationMethodSet)
                                 {
-                                    foreach (var ion in ionsAndConcentrationsSet)
+                                    foreach (var temperature in temperaturesSet)
                                     {
-                                        foreach (var duration in durationTimesSet)
+                                        foreach (var ion in ionsAndConcentrationsSet)
                                         {
-                                            expandedList.Add(new ProteinData
+                                            foreach (var duration in durationTimesSet)
                                             {
-                                                ProteinId = pd.ProteinId,
-                                                Classification = pd.Classification,
-                                                SoftwareName = software,
-                                                SoftwareVersion = software != null && softwareVersionDict.ContainsKey(software) ? softwareVersionDict[software] : null,
-                                                WaterModel = waterModel,
-                                                ForceField = forceField,
-                                                SimulationMethod = method,
-                                                Temperature = temperature,
-                                                Ions = ion.Ion,
-                                                IonConcentration = ion.Concentration,
-                                                SimulationLength = duration,
-                                            });
+                                                expandedList.Add(new ProteinData
+                                                {
+                                                    ProteinId = pd.ProteinId,
+                                                    Classification = pd.Classification,
+                                                    Residue = residue,
+                                                    SoftwareName = software,
+                                                    SoftwareVersion = software != null && softwareVersionDict.ContainsKey(software) ? softwareVersionDict[software] : null,
+                                                    WaterModel = waterModel.Item1,
+                                                    WaterModelType = waterModel.Item2,
+                                                    ForceField = forceField,
+                                                    SimulationMethod = method,
+                                                    Temperature = temperature,
+                                                    Ions = ion.Ion,
+                                                    IonConcentration = ion.Concentration,
+                                                    SimulationLength = duration,
+                                                   
+                                                });
+                                            }
                                         }
                                     }
                                 }
@@ -319,6 +338,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 {
                     x.ProteinId,
                     x.Classification,
+                    x.Residue,
                     SoftwareName = x.SoftwareName?.ToLower(),
                     WaterModel = x.WaterModel?.ToLower(),
                     ForceFieldSoftware = x.ForceField?.ToLower(),
@@ -351,7 +371,21 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                     "implicit water", "implicit solvent model", "implicit solvent content",
                     "implicit solvent"
                 };
+        private class TupleComparer : IEqualityComparer<(string, string)>
+        {
+            public bool Equals((string, string) x, (string, string) y)
+            {
+                return StringComparer.OrdinalIgnoreCase.Equals(x.Item1 ?? string.Empty, y.Item1 ?? string.Empty) &&
+                       StringComparer.OrdinalIgnoreCase.Equals(x.Item2 ?? string.Empty, y.Item2 ?? string.Empty);
+            }
 
+            public int GetHashCode((string, string) obj)
+            {
+                int hash1 = StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Item1 ?? string.Empty);
+                int hash2 = StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Item2 ?? string.Empty);
+                return hash1 ^ hash2;
+            }
+        }
         private SimulationSoftware FindSoftwareInSentence(string sentence, List<string> KnownSoftware)
         {
             // First check if this sentence is about simulation at all
@@ -360,7 +394,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 return null;
             }
 
-            foreach (var software in KnownSoftware)
+            foreach (var software in KnownSoftware.OrderByDescending(m => m.Length))
             {
                 // Look for software name followed by optional parenthesized version or space+version
                 var match = Regex.Match(sentence,
@@ -501,7 +535,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
 
             var results = new HashSet<ForceFieldSoftware>(new ForceFieldSoftwareComparer());
 
-            foreach (var ff in KnownForceFields)
+            foreach (var ff in KnownForceFields.OrderByDescending(m => m.Length))
             {
                 bool foundAny = false;
 
@@ -578,7 +612,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
 
             string lowerSentence = sentence.ToLower();
 
-            foreach (var method in knownMethods)
+            foreach (var method in knownMethods.OrderByDescending(m => m.Length))
             {
                 if (string.IsNullOrEmpty(method))
                 {
@@ -774,7 +808,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 if (!concentrations.Any()) continue;
 
                 // Find and process ions
-                foreach (var ion in knownIons)
+                foreach (var ion in knownIons.OrderByDescending(m => m.Length))
                 {
                     var pattern = $@"\b{Regex.Escape(ion)}\b";
                     foreach (Match match in Regex.Matches(chunk, pattern, RegexOptions.IgnoreCase))
@@ -821,7 +855,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
             if (!concentrations.Any()) return;
 
             // Process unmatched ions
-            foreach (var ion in knownIons)
+            foreach (var ion in knownIons.OrderByDescending(m=>m.Length))
             {
                 var pattern = $@"\b{Regex.Escape(ion)}\b";
                 foreach (Match match in Regex.Matches(sentence, pattern, RegexOptions.IgnoreCase))
@@ -871,6 +905,49 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 return new List<int>();
             }
         }
+
+        private List<string> FindResiduesInSentence(string sentence)
+        {
+            var residues = new List<string>();
+
+            if (string.IsNullOrWhiteSpace(sentence))
+            {
+                return residues;
+            }
+
+            // Normalize the sentence for case-insensitive comparison
+            string lowerSentence = sentence.ToLower();
+
+            // Check if sentence contains "prp" or "residue(s)"
+            bool containsPrp = lowerSentence.Contains("prp");
+            bool containsResidue = lowerSentence.Contains("residue") || lowerSentence.Contains("residues");
+
+            if (!containsPrp && !containsResidue)
+            {
+                return residues;
+            }
+
+            // More precise pattern that only matches the specific cases we want
+            var pattern = @"(?:prp\s*(?:c\s*)?|residues?\s*)(?:\(?\s*)([a-zA-Z]?\d+(?:[–\-−]\d+)?)(?:\s*\)?)";
+            var matches = Regex.Matches(sentence, pattern, RegexOptions.IgnoreCase);
+
+            foreach (Match match in matches)
+            {
+                if (match.Success && match.Groups.Count > 1)
+                {
+                    string residue = match.Groups[1].Value;
+
+                    if (!string.IsNullOrWhiteSpace(residue))
+                    {
+                        residues.Add(residue);
+                    }
+                }
+            }
+
+            return residues.Distinct().ToList();  // Remove duplicates
+        }
+
+
     }
 }
 

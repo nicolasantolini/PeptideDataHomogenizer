@@ -1,9 +1,17 @@
 ﻿@page "/manage-regex-entities"
 @using Entities
 @using Entities.RegexData
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
 @using SuperSimpleBlazorModal
 @inject DatabaseDataHandler DatabaseDataHandler
+@inject UserOrganizationService UserOrganizationService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+
+@inject IJSRuntime JSRuntime
 
 @rendermode InteractiveServer
 
@@ -40,7 +48,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Software Name</th>
-                                    <th width="120px">Actions</th>
+                                    @if(isAllowedToEdit)
+                                    {
+                                        <th width="120px">Actions</th>
+                                    }
                                 </tr>
                             </thead>
                             <tbody>
@@ -48,16 +59,19 @@
                                 {
                                     <tr>
                                         <td>@item.SoftwareName</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-secondary me-1"
-                                                    @onclick="() => ShowEditModal(item)">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger"
-                                                    @onclick="() => ShowDeleteModal(item, ForceFieldSoftwareType)">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </td>
+                                        @if (isAllowedToEdit)
+                                        {
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                        @onclick="() => ShowEditModal(item)">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        @onclick="() => ShowDeleteModal(item, ForceFieldSoftwareType)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        }
                                     </tr>
                                 }
                             </tbody>
@@ -65,7 +79,7 @@
                     </div>
                 }
                 <div class="d-flex justify-content-end mt-3">
-                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(ForceFieldSoftwareType)">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(ForceFieldSoftwareType)" disabled="@(!isAllowedToEdit)">
                         <i class="bi bi-plus-lg"></i> Add Software
                     </button>
                 </div>
@@ -103,7 +117,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Method Name</th>
-                                    <th width="120px">Actions</th>
+                                    @if(isAllowedToEdit)
+                                    {
+                                        <th width="120px">Actions</th>
+                                    }
                                 </tr>
                             </thead>
                             <tbody>
@@ -111,16 +128,19 @@
                                 {
                                     <tr>
                                         <td>@item.MethodName</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-secondary me-1"
-                                                    @onclick="() => ShowEditModal(item)">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger"
-                                                    @onclick="() => ShowDeleteModal(item,SimulationMethodType)">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </td>
+                                        @if (isAllowedToEdit)
+                                        {
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                        @onclick="() => ShowEditModal(item)">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        @onclick="() => ShowDeleteModal(item,SimulationMethodType)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        }
                                     </tr>
                                 }
                             </tbody>
@@ -128,7 +148,7 @@
                     </div>
                 }
                 <div class="d-flex justify-content-end mt-3">
-                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(SimulationMethodType)">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(SimulationMethodType)" disabled="@(!isAllowedToEdit)">
                         <i class="bi bi-plus-lg"></i> Add Method
                     </button>
                 </div>
@@ -166,7 +186,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Software Name</th>
-                                    <th width="120px">Actions</th>
+                                    @if(isAllowedToEdit)
+                                    {
+                                        <th width="120px">Actions</th>
+                                    }
                                 </tr>
                             </thead>
                             <tbody>
@@ -174,16 +197,19 @@
                                 {
                                     <tr>
                                         <td>@item.SoftwareName</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-secondary me-1"
-                                                    @onclick="() => ShowEditModal(item)">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger"
-                                                    @onclick="() => ShowDeleteModal(item,SimulationSoftwareType)">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </td>
+                                        @if (isAllowedToEdit)
+                                        {
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                        @onclick="() => ShowEditModal(item)">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        @onclick="() => ShowDeleteModal(item,SimulationSoftwareType)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        }
                                     </tr>
                                 }
                             </tbody>
@@ -191,7 +217,7 @@
                     </div>
                 }
                 <div class="d-flex justify-content-end mt-3">
-                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(SimulationSoftwareType)">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(SimulationSoftwareType)" disabled="@(!isAllowedToEdit)">
                         <i class="bi bi-plus-lg"></i> Add Software
                     </button>
                 </div>
@@ -230,7 +256,10 @@
                                 <tr>
                                     <th>Model Name</th>
                                     <th>Type</th>
-                                    <th width="120px">Actions</th>
+                                    @if(isAllowedToEdit)
+                                    {
+                                        <th width="120px">Actions</th>
+                                    }
                                 </tr>
                             </thead>
                             <tbody>
@@ -244,6 +273,8 @@
                                         <tr>
                                             <td>@item.WaterModelName</td>
                                             <td>@item.WaterModelType</td>
+                                            @if (isAllowedToEdit)
+                                        {
                                             <td>
                                                 <button class="btn btn-sm btn-outline-secondary me-1"
                                                         @onclick="() => ShowEditModal(item)">
@@ -254,6 +285,7 @@
                                                     <i class="bi bi-trash"></i>
                                                 </button>
                                             </td>
+                                            }
                                         </tr>
                                     }
                                 }
@@ -262,7 +294,7 @@
                     </div>
                 }
                 <div class="d-flex justify-content-end mt-3">
-                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(WaterModelType)">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(WaterModelType)" disabled="@(!isAllowedToEdit)">
                         <i class="bi bi-plus-lg"></i> Add Water Model
                     </button>
                 </div>
@@ -301,7 +333,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Ion Name</th>
-                                    <th width="120px">Actions</th>
+                                    @if(isAllowedToEdit)
+                                    {
+                                        <th width="120px">Actions</th>
+                                    }
                                 </tr>
                             </thead>
                             <tbody>
@@ -309,16 +344,19 @@
                                 {
                                     <tr>
                                         <td>@item.IonName</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-secondary me-1"
-                                                    @onclick="() => ShowEditModal(item)">
-                                                <i class="bi bi-pencil"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-danger"
-                                                    @onclick="() => ShowDeleteModal(item, IonType)">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </td>
+                                        @if (isAllowedToEdit)
+                                        {
+                                            <td>
+                                                <button class="btn btn-sm btn-outline-secondary me-1"
+                                                @onclick="() => ShowEditModal(item)">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                @onclick="() => ShowDeleteModal(item, IonType)">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </td>
+                                        }
                                     </tr>
                                 }
                             </tbody>
@@ -326,7 +364,7 @@
                     </div>
                 }
                 <div class="d-flex justify-content-end mt-3">
-                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(IonType)">
+                    <button class="btn btn-primary m-2" @onclick="() => ShowAddModal(IonType)" disabled="@(!isAllowedToEdit)">
                         <i class="bi bi-plus-lg"></i> Add Ion
                     </button>
                 </div>
@@ -460,10 +498,37 @@
     private string itemToDeleteName;
     private string entityTypeToDelete;
 
+    private int? CurrentOrganizationId = 0;
+    private ApplicationUser currentUser;
+
+    private bool isAllowedToEdit = false;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if(firstRender)
         {
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (currentUser == null)
+            {
+                Console.WriteLine("User not found. Please log in.");
+                return;
+            }
+            var aspNetRoles = await UserManager.GetRolesAsync(currentUser);
+            if (aspNetRoles.Contains("Admin") ||aspNetRoles.Contains("SuperAdmin"))
+            {
+                isAllowedToEdit = true;
+            }
+            else
+            {
+
+                CurrentOrganizationId = await ContextCookieManager.GetContextAsync(JSRuntime);
+                var role = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(CurrentOrganizationId.Value, currentUser.Id);
+                if (role == "Admin")
+                {
+                    isAllowedToEdit = true;
+                }
+            }
+            
             await LoadAllData();
             StateHasChanged(); // Ensure the UI updates after loading data
         }

@@ -1,0 +1,331 @@
+﻿@page "/organizations"
+@using Entities
+@using PeptideDataHomogenizer.Components.SharedComponents
+@using PeptideDataHomogenizer.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject OrganizationService OrganizationService
+@inject IWebHostEnvironment Environment
+@implements IDisposable
+
+@rendermode InteractiveServer
+
+<PageTitle>Organizations</PageTitle>
+
+<h3 class="mb-4">Organizations</h3>
+<small class="text-muted">
+    Page reserved to admins. Make sure you are allowed to be here.
+</small>
+
+@if (isRenderingPage)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+}
+else{
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <button @onclick="ShowAddModal" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Add Organization
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(StatusMessage))
+    {
+        <div class="alert @StatusMessageClass alert-dismissible fade show" role="alert">
+            @StatusMessage
+            <button type="button" class="btn-close" @onclick="ClearStatusMessage"></button>
+        </div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="input-group">
+                <input type="text" @bind="SearchTerm" @bind:event="oninput" class="form-control" placeholder="Search organizations..." />
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <OrganizationsTable Organizations="FilteredOrganizations"
+                   OnEdit="ShowEditModal"
+                   OnDelete="ShowDeleteModal"
+                   OnShowFullImage="ShowFullImage" />
+    </div>
+}
+
+    @if(ShowModal){
+<!-- Add/Edit Modal -->
+<div class="modal @(ShowModal ? "show d-block" : "")" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@(CurrentOrganization.Id == 0 ? "Add Organization" : "Edit Organization")</h5>
+                <button type="button" class="btn-close" @onclick="CloseModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="@CurrentOrganization">
+                    <DataAnnotationsValidator />
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Name (*)</label>
+                                <InputText id="name" @bind-Value="CurrentOrganization.Name" class="form-control" />
+                                <ValidationMessage For="@(() => CurrentOrganization.Name)" />
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <InputTextArea id="description" @bind-Value="CurrentOrganization.Description" class="form-control" rows="3" />
+                                <ValidationMessage For="@(() => CurrentOrganization.Description)" />
+                            </div>
+                            <div class="mb-3">
+                                <label for="website" class="form-label">Website URL</label>
+                                <InputText id="website" @bind-Value="CurrentOrganization.WebsiteUrl" class="form-control" />
+                                <ValidationMessage For="@(() => CurrentOrganization.WebsiteUrl)" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Organization Logo</label>
+                                <div class="border rounded p-3 text-center">
+                                    <!-- Inside the modal-body section, replace the logo preview part -->
+                                    <div class="mb-3 d-flex justify-content-center">
+                                        @if (!string.IsNullOrEmpty(LogoPreviewUrl))
+                                        {
+                                            <img src="@LogoPreviewUrl" class="rounded-circle border"
+                                                 style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                 @onclick="() => ShowFullImage(LogoPreviewUrl)" />
+                                        }
+                                        else if (CurrentOrganization.LogoData != null && CurrentOrganization.LogoData.Length > 0)
+                                        {
+                                            <img src="data:@CurrentOrganization.ContentType;base64,@(Convert.ToBase64String(CurrentOrganization.LogoData))" class="rounded-circle border"
+                                                    style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                    @onclick="() => ShowFullImage((CurrentOrganization.ContentType, CurrentOrganization.LogoData))" />
+                                        }
+                                        else
+                                        {
+                                            <div class="rounded-circle border d-flex justify-content-center align-items-center"
+                                                 style="width: 150px; height: 150px; background-color: #f8f9fa;">
+                                                <i class="bi bi-building text-secondary" style="font-size: 3rem;"></i>
+                                            </div>
+                                        }
+                                    </div>
+                                    <InputFile OnChange="HandleLogoChangeAsync" class="form-control" accept="image/*" />  
+                                    <div class="form-text">Max size: 10MB. All image types accepted.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                        @if (CurrentOrganization.Id > 0)
+                        {
+                            <OrganizationUsersManager CurrentOrganization="CurrentOrganization" UserRole="admin"></OrganizationUsersManager>
+                        }
+                        <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                            <button type="button" @onclick="HandleValidSubmit" class="btn btn-primary">
+                            @(CurrentOrganization.Id == 0 ? "Create" : "Update")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>}
+
+@if(ShowDeleteConfirmation){
+<!-- Delete Confirmation Modal -->
+<div class="modal @(ShowDeleteConfirmation ? "show d-block" : "")" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" @onclick="CloseDeleteModal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete organization <strong>@OrganizationToDelete?.Name</strong>?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+}
+<FullImage FullImageUrl="@FullImageUrl" OnCloseFullImage="CloseFullImage" />
+
+
+@code {
+    private List<Organization> Organizations = new();
+    private List<Organization> FilteredOrganizations => Organizations
+        .Where(o => string.IsNullOrEmpty(SearchTerm) ||
+                    o.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(o => o.Name)
+        .ToList();
+
+    private string SearchTerm = string.Empty;
+    private bool ShowModal = false;
+    private bool ShowDeleteConfirmation = false;
+    private Organization CurrentOrganization = new();
+    private Organization? OrganizationToDelete;
+    private string StatusMessage = string.Empty;
+    private string StatusMessageClass = "alert-success";
+    private ElementReference LogoInput;
+    private IBrowserFile? LogoFile;
+    private string? LogoPreviewUrl;
+
+    private bool isRenderingPage = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOrganizations();
+    }
+
+    private async Task LoadOrganizations()
+    {
+        isRenderingPage = true;
+        Organizations = await OrganizationService.GetAllOrganizationsAsync();
+        isRenderingPage = false;
+    }
+
+    private void ShowAddModal()
+    {
+        CurrentOrganization = new Organization();
+        LogoFile = null;
+        LogoPreviewUrl = null;
+        ShowModal = true;
+    }
+
+    private void ShowEditModal(Organization org)
+    {
+        CurrentOrganization = new Organization
+        {
+            Id = org.Id,
+            Name = org.Name,
+            Description = org.Description,
+            WebsiteUrl = org.WebsiteUrl,
+            LogoData = org.LogoData,
+            ContentType = org.ContentType
+        };
+        LogoFile = null;
+        LogoPreviewUrl = null;
+        ShowModal = true;
+    }
+
+    private void CloseModal()
+    {
+        ShowModal = false;
+    }
+
+    private void ShowDeleteModal(Organization org)
+    {
+        OrganizationToDelete = org;
+        ShowDeleteConfirmation = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        ShowDeleteConfirmation = false;
+        OrganizationToDelete = null;
+    }
+
+    private (string contentType,byte[] imageData)? FullImageUrl;
+
+    private void ShowFullImage((string contentType, byte[] imageData) image)
+    {
+        FullImageUrl = image;
+    }
+
+    private void ShowFullImage(string imageSrcString)
+    {
+        FullImageUrl = (contentType: "image/png", imageData: Convert.FromBase64String(imageSrcString));
+    }
+
+
+    private void CloseFullImage()
+    {
+        FullImageUrl = null;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(CurrentOrganization.Name))
+            {
+                SetStatusMessage("Name is required.", false);
+                return;
+            }
+            if (CurrentOrganization.Id == 0)
+            {
+                await OrganizationService.AddOrganizationAsync(CurrentOrganization, LogoFile);
+                SetStatusMessage("Organization created successfully!", true);
+            }
+            else
+            {
+                await OrganizationService.UpdateOrganizationAsync(CurrentOrganization, LogoFile);
+                SetStatusMessage("Organization updated successfully!", true);
+            }
+
+            await LoadOrganizations();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Error: {ex.Message}", false);
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (OrganizationToDelete != null)
+        {
+            try
+            {
+                await OrganizationService.DeleteOrganizationAsync(OrganizationToDelete.Id);
+                SetStatusMessage("Organization deleted successfully!", true);
+                await LoadOrganizations();
+            }
+            catch (Exception ex)
+            {
+                SetStatusMessage($"Error: {ex.Message}", false);
+            }
+        }
+        CloseDeleteModal();
+    }
+
+    private async Task HandleLogoChangeAsync(InputFileChangeEventArgs e)
+    {
+        LogoFile = e.File;
+        var format = "image/png";
+        var resizedImage = await e.File.RequestImageFileAsync(format, 300, 300);
+        var buffer = new byte[resizedImage.Size];
+        await resizedImage.OpenReadStream().ReadAsync(buffer);
+        LogoPreviewUrl = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
+
+        CurrentOrganization.ContentType = format;
+        CurrentOrganization.LogoData = buffer;
+    }
+
+    private void SetStatusMessage(string message, bool isSuccess)
+    {
+        StatusMessage = message;
+        StatusMessageClass = isSuccess ? "alert-success" : "alert-danger";
+    }
+
+    private void ClearStatusMessage()
+    {
+        StatusMessage = string.Empty;
+    }
+
+    public void Dispose()
+    {
+        // Clean up if needed
+    }
+
+
+}
+

@@ -1,0 +1,132 @@
+﻿@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Entities
+@using PeptideDataHomogenizer.Tools.HtmlTools
+
+@rendermode InteractiveServer
+
+<div class="table-viewer-container">
+    <div class="table-display-area">
+        @if (Images == null || !Images.Any())
+        {
+            <div class="no-tables-message">
+                <i class="fas fa-image"></i>
+                <p>No images to display</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-tabs">
+                @foreach (var image in Images.Select((img, i) => new { Image = img, Index = i }))
+                {
+                    <button class="@GetTabClass(image.Image)" @onclick="() => SetActiveImage(image.Image)">
+                        @($"Image {image.Index + 1}")
+                    </button>
+                }
+            </div>
+
+            @if (ActiveImage != null)
+            {
+                <div class="table-wrapper">
+                    <div class="table-header">
+                        <h3>@ActiveImage.Caption</h3>
+                        <div class="table-meta">
+                            <span>@Images.Count images total</span>
+                        </div>
+                    </div>
+
+                    <div class="scrollable-image">
+                        <img src="data:@ActiveImage.ContentType;base64,@(Convert.ToBase64String(ActiveImage.ImageData))" alt="@ActiveImage.Caption" class="displayed-image" />
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="action-sidebar">
+        <h4>Image Actions</h4>
+        <div class="action-list">
+            @foreach (var action in Actions)
+            {
+                <button class="action-button @action.AdditionalClass"
+                        @onclick="() => HandleAction(action.ActionName, ActiveImage)">
+                    @if (!string.IsNullOrEmpty(action.IconClass))
+                    {
+                        <i class="@action.IconClass"></i>
+                    }
+                    @action.Label
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@inject IJSRuntime JS
+
+@code {
+    [Parameter]
+    public List<ImageHolder> Images { get; set; }
+
+    [Parameter]
+    public List<ImageAction> Actions { get; set; } = new List<ImageAction>
+    {
+        new ImageAction { ActionName = "download", Label = "Download Image", IconClass = "fas fa-download" }
+    };
+
+    [Parameter]
+    public EventCallback<ActionEventArgs> OnAction { get; set; }
+
+    private ImageHolder ActiveImage { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Images != null && Images.Any() && ActiveImage == null)
+        {
+            ActiveImage = Images.First();
+        }
+    }
+
+    private string GetTabClass(ImageHolder image)
+    {
+        return image == ActiveImage ? "tab-button active" : "tab-button";
+    }
+
+    private void SetActiveImage(ImageHolder image)
+    {
+        ActiveImage = image;
+    }
+
+    private async Task HandleAction(string actionName, ImageHolder image)
+    {
+        if (actionName == "download" && image != null)
+        {
+            await DownloadImageAsync(image, image.Caption);
+        }
+        await OnAction.InvokeAsync(new ActionEventArgs
+        {
+            ActionName = actionName,
+            Image = image
+        });
+    }
+
+    private async Task DownloadImageAsync(ImageHolder image, string caption)
+    {
+        var fileName = !string.IsNullOrWhiteSpace(caption) ? $"{caption}.png" : "image.png";
+        //dowbload image using JavaScript, use the contenttype, file name and base64
+        await JS.InvokeVoidAsync("downloadImageFromDb", image.FileName, image.ImageData, image.ContentType);
+    }
+
+    public class ImageAction
+    {
+        public string ActionName { get; set; }
+        public string Label { get; set; }
+        public string IconClass { get; set; }
+        public string AdditionalClass { get; set; }
+    }
+
+    public class ActionEventArgs
+    {
+        public string ActionName { get; set; }
+        public ImageHolder Image { get; set; }
+    }
+}    

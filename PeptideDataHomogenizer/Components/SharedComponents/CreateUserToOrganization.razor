@@ -1,0 +1,301 @@
+﻿@using Entities
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.Identity.EntityFrameworkCore
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@inject IJSRuntime JSRuntime
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject NavigationManager NavigationManager
+@inject DatabaseDataHandler DatabaseDataHandler
+@inject UserOrganizationService UserOrganizationService
+@inject OrganizationService OrganizationService
+
+@if (IsModalVisible)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,0.5);" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header d-flex align-items-center">
+                    <img src="data:@organization.ContentType;base64,@(Convert.ToBase64String(organization.LogoData))"
+                         class="rounded-circle border me-3"
+                         style="width: 48px; height: 48px; object-fit: contain; background-color: #f8f9fa;" />
+                    <h5 class="modal-title mb-0">Add New User to @organization.Name</h5>
+                    <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close" @onclick="ResetForm"></button>
+                </div>
+
+            <div class="modal-body">
+                <div class="mb-4">
+                    <label for="userEmail" class="form-label">User Email</label>
+                    <input type="email" class="form-control" id="userEmail"
+                           @bind="UserEmail" @bind:event="oninput"
+                           disabled="@IsUserCreated" />
+                    <div class="form-text">Enter the email address of the user you want to add</div>
+                </div>
+                <div class="mb-4">
+                    <label for="userRole" class="form-label">User Role</label>
+                    <select class="form-select" id="userRole" @bind="SelectedRole" disabled="@IsUserCreated">
+                        @foreach (var role in Roles)
+                        {
+                            <option value="@role">@role</option>
+                        }
+                    </select>
+                    <div class="form-text">Select the role for the new user</div>
+                </div>
+
+                @if (IsUserCreated)
+                {
+                    <div class="alert alert-success mb-3">
+                        <i class="bi bi-check-circle-fill me-2"></i> User created successfully!
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Registration Link</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" value="@RegistrationLink" readonly />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="CopyToClipboard">
+                                <i class="bi @(IsCopied ? "bi-check" : "bi-clipboard")"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Share this link with the user to complete registration, it will expire in 45 minutes (@DateTime.Now.AddMinutes(45).ToShortTimeString())</div>
+                    </div>
+                }
+            </div>
+            <div class="modal-footer">
+                @if (!IsUserCreated)
+                {
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @onclick="Hide">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateUser" disabled="@(!IsEmailValid || IsProcessing)">
+                        @if (IsProcessing)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <span class="ms-2">Creating...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-person-plus me-2"></i>
+                            <span>Create User</span>
+                        }
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal" @onclick="Hide">Done</button>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public int OrganizationId { get; set; }
+    [Parameter] public EventCallback LoadOrganizationUsers { get; set; }
+
+    private Organization organization = new Organization();
+    private string UserEmail = string.Empty;
+    private string RegistrationLink = string.Empty;
+    private bool IsProcessing = false;
+    private bool IsUserCreated = false;
+    private bool IsCopied = false;
+    private bool IsModalVisible = false;
+
+    private string[] Roles = { "visitor", "editor", "admin" };
+    private string SelectedRole = "visitor";
+
+    private IEnumerable<IdentityError> identityErrors = Enumerable.Empty<IdentityError>();
+
+    private bool IsEmailValid =>
+        !string.IsNullOrWhiteSpace(UserEmail) &&
+        UserEmail.Contains('@') &&
+        UserEmail.Contains('.');
+
+    public async Task Show()
+    {
+        if (OrganizationId <= 0)
+        {
+            throw new InvalidOperationException("OrganizationId must be set before showing the modal.");
+        }
+        organization = await OrganizationService.GetOrganizationByIdAsync(OrganizationId);
+        if (organization == null)
+        {
+            throw new InvalidOperationException($"Organization with ID {OrganizationId} not found.");
+        }
+        ResetForm();
+        IsModalVisible = true;
+        StateHasChanged();
+    }
+
+    private void CloseModal()
+    {
+        IsModalVisible = false;
+        ResetForm();
+    }
+
+    private async Task CreateUser()
+    {
+        if (!IsEmailValid) return;
+
+        if (OrganizationId <= 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Invalid organization ID. Please select a valid organization.");
+            return;
+        }
+
+        IsProcessing = true;
+        identityErrors = Enumerable.Empty<IdentityError>();
+
+        try
+        {
+
+            var existingUser = await UserManager.FindByEmailAsync(UserEmail);
+            //if user already exists, generate new registration link
+            if(existingUser != null && existingUser.HasRegistered)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "User already exists and has registered. Please use a different email.");
+                return;
+            }
+            else if (existingUser != null)
+            {
+                long randomLongToken = new Random().NextInt64(111111111111, long.MaxValue);
+                existingUser.RegistrationToken = randomLongToken;
+                existingUser.RegistrationTokenExpiration = DateTime.Now.AddMinutes(45);
+                await UserManager.UpdateAsync(existingUser);
+
+                if (await UserOrganizationService.IsUserInOrganizationAsync(existingUser.Id, OrganizationId))
+                {
+                    // Update role if necessary
+                    var existingUserRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(OrganizationId, existingUser.Id);
+                    if (existingUserRole != SelectedRole)
+                    {
+                        existingUserRole = SelectedRole;
+                        await UserOrganizationService.UpdateRoleByUserIdAndOrganizationIdAsync(existingUser.Id,OrganizationId,existingUserRole);
+                    }
+
+                }
+                else
+                {
+                    await UserOrganizationService.RemoveUserFromAllOrganizationsAsync(existingUser.Id);
+                    var usersPerOrganization = new UsersPerOrganization
+                    {
+                        UserId = existingUser.Id,
+                        OrganizationId = OrganizationId,
+                        Role = SelectedRole
+                    };
+                    await DatabaseDataHandler.AddAsync(usersPerOrganization);
+                }
+                RegistrationLink = $"{NavigationManager.BaseUri}register/{randomLongToken}";
+                IsUserCreated = true;
+                StateHasChanged();
+                await LoadOrganizationUsers.InvokeAsync();
+                return;
+            }
+            else{
+                var user = CreateUserInstance();
+                user.EmailConfirmed = true;
+                await UserStore.SetUserNameAsync(user, UserEmail, CancellationToken.None);
+                var emailStore = GetEmailStore();
+                await emailStore.SetEmailAsync(user, UserEmail, CancellationToken.None);
+                var password = GenerateRandomPassword(30);
+                long randomLongToken = new Random().NextInt64(111111111111, long.MaxValue);
+                user.RegistrationToken = randomLongToken;
+                user.RegistrationTokenExpiration = DateTime.Now.AddMinutes(45);
+
+
+                var result = await UserManager.CreateAsync(user, password);
+                if (!result.Succeeded)
+                {
+                    identityErrors = result.Errors;
+                    return;
+                }
+
+                user = await UserManager.FindByEmailAsync(UserEmail);
+                if (user == null)
+                {
+                    identityErrors = new List<IdentityError>
+                    {
+                        new IdentityError { Code = "UserNotFound", Description = "User creation failed, user not found after creation." }
+                    };
+                    return;
+                }
+
+                UsersPerOrganization usersPerOrganization = new UsersPerOrganization
+                {
+                    UserId = user.Id,
+                    OrganizationId = OrganizationId,
+                    Role = SelectedRole
+                };
+                await DatabaseDataHandler.AddAsync(usersPerOrganization);
+
+                var link = $"{NavigationManager.BaseUri}register/{randomLongToken}";
+                RegistrationLink = link;
+
+                IsUserCreated = true;
+            }
+            await LoadOrganizationUsers.InvokeAsync();
+        }
+        finally
+        {
+            IsProcessing = false;
+        }
+    }
+
+    private string GenerateRandomPassword(int length)
+    {
+        const string validChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()";
+        var random = new Random();
+        return new string(Enumerable.Repeat(validChars, length)
+            .Select(s => s[random.Next(s.Length)]).ToArray());
+    }
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    {
+        if (!UserManager.SupportsUserEmail)
+        {
+            throw new NotSupportedException("The default UI requires a user store with email support.");
+        }
+        return (IUserEmailStore<ApplicationUser>)UserStore;
+    }
+
+    private ApplicationUser CreateUserInstance()
+    {
+        try
+        {
+            return Activator.CreateInstance<ApplicationUser>();
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
+                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor.");
+        }
+    }
+
+    private async Task CopyToClipboard()
+    {
+        await Task.Yield(); // No JS fallback, so just simulate copy
+        IsCopied = true;
+        await Task.Delay(2000);
+        IsCopied = false;
+        StateHasChanged();
+    }
+
+    private void ResetForm()
+    {
+        UserEmail = string.Empty;
+        RegistrationLink = string.Empty;
+        IsProcessing = false;
+        IsUserCreated = false;
+        IsCopied = false;
+        identityErrors = Enumerable.Empty<IdentityError>();
+    }
+
+    //Reset and close the modal
+    public void Hide()
+    {
+        IsModalVisible = false;
+        ResetForm();
+        StateHasChanged();
+    }
+}

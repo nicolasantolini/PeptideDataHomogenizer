@@ -1,18 +1,53 @@
 ﻿@page "/manage-discredited-publishers"
 @using Entities
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
 @using SuperSimpleBlazorModal
 @inject DatabaseDataHandler DatabaseDataHandler
+@inject PublishersService PublishersService
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject UserProjectService UserProjectService
 
 @rendermode InteractiveServer
 
 <h3 class="mb-4">Manage Discredited Publishers</h3>
 
+@if (isRenderingPage)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+}
+else if(errorMessage != string.Empty)
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
+else{
+
+
 <div class="card shadow-sm">
     <div class="card-header bg-light">
         <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Publisher List</h5>
-            <button class="btn btn-primary btn-sm" @onclick="ShowAddModal">
+            <div class="d-flex align-items-center gap-2">
+                <h5 class="mb-0">Discredited Publishers List</h5>
+                <span class="info-tooltip" tabindex="0">
+                    <i class="bi bi-info-circle text-info" style="cursor: pointer;"></i>
+                    <span class="info-tooltip-text">
+                        To discredit a publisher means that when the full text of an article is being fetched, if the url on which the full text was found CONTAINS the name of a discredit Publisher, then that article will be automatically discredited. Publishers are discredited at a project level.
+                        <br />
+                        Example: to discredit all article from MDPI, then find an invariant part of the URL to recognize such publisher (in this case, "mdpi.com")
+                    </span>
+                </span>
+
+                </div>
+            <button class="btn btn-primary btn-sm" @onclick="ShowAddModal" disabled="@(UserRole == "visitor")">
                 <i class="bi bi-plus-lg"></i> Add Publisher
             </button>
         </div>
@@ -39,7 +74,6 @@
                 <table class="table table-hover">
                     <thead class="table-light">
                         <tr>
-                            <th>ID</th>
                             <th>Publisher URL</th>
                             <th width="120px">Actions</th>
                         </tr>
@@ -48,15 +82,14 @@
                         @foreach (var publisher in publishers)
                         {
                             <tr>
-                                <td>@publisher.Id</td>
                                 <td>@publisher.Url</td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-secondary me-1"
-                                            @onclick="() => ShowEditModal(publisher)">
+                                                @onclick="() => ShowEditModal(publisher)" disabled="@(UserRole == "visitor")">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <button class="btn btn-sm btn-outline-danger"
-                                            @onclick="() => ShowDeleteModal(publisher)">
+                                                @onclick="() => ShowDeleteModal(publisher)" disabled="@(UserRole == "visitor")">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </td>
@@ -68,6 +101,8 @@
         }
     </div>
 </div>
+
+}
 
 <SimpleModal @ref="publisherModalRef"
              Id="publisher-modal"
@@ -123,14 +158,65 @@
     private SimpleModal publisherModalRef;
     private SimpleModal deleteModalRef;
 
-    protected override async Task OnInitializedAsync()
+    private string errorMessage = string.Empty;
+    private bool isRenderingPage = true;
+
+    private string UserRole = string.Empty;
+    private ApplicationUser currentUser;
+    private int? ProjectId = 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadPublishers();
+        if (firstRender)
+        {
+            isRenderingPage = true;
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (currentUser == null)
+            {
+                errorMessage = "You must be logged in to manage discredited publishers.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            ProjectId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+            if (ProjectId == null || ProjectId <= 0)
+            {
+                errorMessage = "No project selected. Please select a project to manage discredited publishers.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+            await LoadPublishers();
+
+            UserRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(ProjectId.Value, currentUser.Id);
+            var roles = await UserManager.GetRolesAsync(currentUser);
+
+            if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+                UserRole = "admin";
+            if (UserRole == "")
+            {
+                errorMessage = "You do not have permission to view discredited publishers for this project.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            isRenderingPage = false;
+            StateHasChanged();
+        }
     }
+
+    private async Task<string> GetExtendedNameByUserId(string id)
+    {
+        var user = await UserManager.FindByIdAsync(id);
+        return user?.ExtendedFullName ?? "Unknown User";
+    }
+
 
     private async Task LoadPublishers()
     {
-        publishers = await DatabaseDataHandler.GetAllAsync<DiscreditedPublisher>();
+        publishers = await DatabaseDataHandler.GetAsync<DiscreditedPublisher>();
     }
 
     private void ShowAddModal()
@@ -154,6 +240,7 @@
 
     private async Task HandleValidSubmit()
     {
+        currentPublisher.ProjectId = ProjectId.Value;
         if (isEditing)
         {
             // Find the original publisher by ID, update and save

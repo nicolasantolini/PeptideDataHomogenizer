@@ -1,6 +1,8 @@
 ﻿@using Entities
 @using Entities.RegexData
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
 @using PeptideDataHomogenizer.Tools
 @using PeptideDataHomogenizer.Tools.HtmlTools
 @using PeptideDataHomogenizer.Tools.RegexExtractors
@@ -12,18 +14,31 @@
 @inject IFullArticleDownloader FullArticleDownloader
 @inject ArticleExtractorFromHtml ArticleExtractorFromHtml
 @inject DatabaseDataHandler DatabaseDataHandler
+@inject ArticleService ArticleService
+@inject ArticleContentService ArticleContentService
+@inject ArticleModerationService ArticleModerationService
+@inject ArticlePerProjectService ArticlePerProjectService
+@inject ProteinDataService ProteinDataService
+@inject ProteinDataPerProjectService ProteinDataPerProjectService
 @inject PDBRecordsExtractor PDBRecordsExtractor
 @inject IPageFetcher PageFetcher
-
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <SimpleModal @ref="modal"
 Id="article-detail-modal"
 OnModalStateChange="HandleModalStateChange"
-OpenOnFirstRender="false">
+OpenOnFirstRender="true">
 
-    @if (Article != null)
+    @if (isLoading)
     {
-        <div class="modal-header position-relative @(Article.Discredited ? "discredited-header" : "")">
+        <div class="loading-progress">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    }
+    else{
+    <div class="modal-header sticky-modal-header @(ArticlePerProject?.IsDiscredited == true ? "discredited-header" : "")">
             <style>
             .discredited-header {
                 background-color: #ffcccc !important;
@@ -31,20 +46,47 @@ OpenOnFirstRender="false">
             .discredited-body {
                 background-color: #ffcccc !important;
             }
+            .already-working-message {
+                background: linear-gradient(90deg, #f7b42c 0%, #fc575e 100%);
+                color: #fff;
+                font-weight: 600;
+                border-radius: 8px;
+                padding: 0.5rem 1.2rem;
+                margin-bottom: 0.75rem;
+                font-size: 1.08rem;
+                box-shadow: 0 2px 8px rgba(252,87,94,0.08);
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                max-width: 90%;
+            }
+            .already-working-message svg {
+                flex-shrink: 0;
+            }
             </style>
+            @if (Article?.ProteinData != null && Article.ProteinData.Any() && Article.ProteinData.All(pd => pd.Id != 0) && !ArticlePerProject.IsApproved)
+            {
+                <div class="already-working-message">
+                    <svg width="22" height="22" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm.75 11.5a.75.75 0 01-1.5 0v-1a.75.75 0 011.5 0v1zm0-2.75a.75.75 0 01-1.5 0V7a.75.75 0 011.5 0v3.75z"/>
+                    </svg>
+                    Someone was already working on this article...
+                </div>
+            }
             <div style="max-width: calc(100% - 150px);">
-                <h5 class="modal-title text-wrap pe-2">@Article.Title @(Article.Discredited ? "DISCREDITED" : "")</h5>
+                <h5 class="modal-title text-wrap pe-2">@Article.Title @(ArticlePerProject?.IsDiscredited == true ? "DISCREDITED" : "")</h5>
             </div>
             <div class="d-flex gap-1">
-                <button type="button" disabled="@(Article.Discredited)" class="btn btn-sm btn-primary" @onclick="ExtractProteinData">
+                <button type="button" disabled="@(ArticlePerProject.IsDiscredited)" class="btn btn-sm btn-primary" @onclick="ExtractProteinData">
                     Extract Protein Data
                 </button>
-                <button type="button" disabled="@(Article.Discredited)" class="btn btn-sm btn-primary" @onclick="CompleteArticle">
+                <button type="button" disabled="@(ArticlePerProject.IsDiscredited)" class="btn btn-sm btn-primary" @onclick="CompleteArticle">
                     Mark Article as Complete
                 </button>
-                <button type="button" disabled="@(Article.Discredited)" class="btn btn-sm btn-danger" @onclick="ShowDiscreditModal">
+                <button type="button" disabled="@(ArticlePerProject.IsDiscredited)" class="btn btn-sm btn-danger" @onclick="ShowDiscreditModal">
                     Discredit
                 </button>
+                <OtherProjectsProtein OtherProjectsProteinData="@otherProjectsProteinData" OnDataCopied="ReplaceProteinData"></OtherProjectsProtein>
                 <label class="btn btn-sm btn-outline-primary d-flex align-items-center" for="pdfUpload">
                     <svg width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
                         <path d="M8 6.5a.5.5 0 0 1 .5.5v3.793l1.146-1.147a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 1 1 .708-.708L7.5 10.793V7a.5.5 0 0 1 .5-.5z"/>
@@ -52,12 +94,18 @@ OpenOnFirstRender="false">
                     </svg>
                     Upload PDF
                 </label>
-                <InputFile disabled="@(Article.Discredited)" id="pdfUpload" style="display:none" OnChange="HandlePdfUpload" accept=".pdf" />
-                <button type="button"  class="btn btn-sm btn-close" @onclick="Close" aria-label="Close"></button>
+                <InputFile disabled="@(ArticlePerProject.IsDiscredited)" id="pdfUpload" style="display:none" OnChange="HandlePdfUpload" accept=".pdf" />
+                
+                    <button type="button"
+                            class="btn btn-lg btn-danger modal-close-btn"
+                            @onclick="Close"
+                            aria-label="Close">
+                        &times;
+                    </button>
             </div>
         </div>
 
-        <div class="modal-body @(Article.Discredited ? "discredited-body" : "")">
+        <div class="modal-body @(ArticlePerProject.IsDiscredited ? "discredited-body" : "")">
             <div class="row mb-3">
                 <div class="col-md-6">
                     <p><strong>Journal:</strong> @Article.Journal</p>
@@ -95,814 +143,444 @@ OpenOnFirstRender="false">
                 <p class="abstract-text">@Article.Abstract</p>
             </div>
 
-            <div class="fulltext-section">
-                <h6>Full Text</h6>
+            
 
-                @if (Article.ProteinData.Any())
-                {
-                    <div class="table-responsive mb-4">
-                        <table class="table table-sm table-striped table-bordered align-middle protein-table">
-                            <thead class="table-primary">
-                                <tr>
-                                    <th>Protein ID</th>
-                                    <th>Classification</th>
-                                    <th>Organism(s)</th>
-                                    <th>Method</th>
-                                    <th>Software Name</th>
-                                    <th>Software Version</th>
-                                    <th>Water Model</th>
-                                    <th>Force Field</th>
-                                    <th>Simulation Method</th>
-                                    <th>Temperature (K)</th>
-                                    <th>Ions</th>
-                                    <th>Ion Concentration (mM)</th>
-                                    <th>Simulation Length (ns)</th>
-                                    <th>Approved</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var protein in Article.ProteinData)
-                                {
-                                    <tr>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.ProteinId,0)" 
-                                                    @bind="protein.ProteinId"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @bind="protein.Classification"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input
-                                                @bind="protein.Organism"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input
-                                                @bind="protein.Method"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.SoftwareName,1)"
-                                                @bind="protein.SoftwareName"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.SoftwareVersion,9)"
-                                                @bind="protein.SoftwareVersion"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.WaterModel,2)" 
-                                                @bind="protein.WaterModel"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.ForceField,3)"
-                                                @bind="protein.ForceField"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.SimulationMethod,4)" 
-                                                @bind="protein.SimulationMethod"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture),5)" 
-                                                @bind="protein.Temperature"
-                                                    type="number"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.Ions,6)" 
-                                                @bind="protein.Ions"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.IonConcentration.ToString(),7)" 
-                                                @bind="protein.IonConcentration"
-                                                    type="number"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input @onclick="() => HighlightText(protein.SimulationLength.ToString(),8)" 
-                                                @bind="protein.SimulationLength"
-                                                    type="number"
-                                                    class="form-control form-control-sm" />
-                                        </td>
-                                        <td>
-                                            <input type="checkbox" @bind="protein.Approved" />
-                                        </td>
-                                        <td>
-                                            <button class="btn btn-sm btn-danger" 
-                                                    @onclick="() => RemoveProtein(protein)">
-                                                Remove
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                                <tr>
-                                    <td>
-                                        <input @bind="newProtein.ProteinId" 
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.Classification"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.Organism"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.Method"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.SoftwareName"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.SoftwareVersion"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.WaterModel"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.ForceField"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.SimulationMethod"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.Temperature"
-                                               type="number"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.Ions"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.IonConcentration"
-                                               type="number"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td>
-                                        <input @bind="newProtein.SimulationLength"
-                                               type="number"
-                                               class="form-control form-control-sm" />
-                                    </td>
-                                    <td class="text-center">
-                                        <input type="checkbox" @bind="newProtein.Approved" />
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm btn-success" 
-                                                @onclick="AddProtein">
-                                            Add
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                         <div class="mt-2">
-                            <button class="btn btn-outline-primary" @onclick="UpdateArticleProteinData">
-                                Update All Protein Data
-                            </button>
+        @if (Article.ProteinData.Any())
+        {
+                <ProteinTable ProteinData="Article.ProteinData"
+                              NewProtein="newProtein"
+                              RemoveProtein="(protein) => RemoveProtein(protein)"
+                              AddProtein="AddProtein"
+                              HighlightText="async (term, termCategory) => await HighlightText(term, termCategory)" 
+                              OnConversionConfirmed="@(args => ConvertValue(args.proteinId, args.index, args.value))"/>
+            <div class="mt-2">
+                <button class="btn btn-outline-primary" @onclick="UpdateArticleProteinData">
+                    Update All Protein Data
+                </button>
 
-                            <button class="btn btn-outline-success" @onclick="ToggleApproveAllProteins" style="transition: background 0.2s, color 0.2s;">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
-                                    @if (AreAllProteinsApproved())
-                                    {
-                                        <path d="M2 8a6 6 0 1112 0A6 6 0 012 8zm9.354-2.646a.5.5 0 00-.708-.708L7 8.293 5.354 6.646a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z"/>
-                                    }
-                                    else
-                                    {
-                                        <path d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-8.646a.5.5 0 00-.708-.708L7 9.293 5.354 7.646a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z"/>
-                                    }
-                                </svg>
-                                @if (AreAllProteinsApproved())
-                                {
-                                    <span>Unmark All as Approved</span>
-                                }
-                                else
-                                {
-                                    <span>Mark All as Approved</span>
-                                }
-                            </button>
-
-                            @code {
-                                private void ToggleApproveAllProteins()
-                                {
-                                if (Article?.ProteinData == null) return;
-                                bool approve = !AreAllProteinsApproved();
-                                foreach (var protein in Article.ProteinData)
-                                {
-                                protein.Approved = approve;
-                                }
-                                }
-
-                                private bool AreAllProteinsApproved()
-                                {
-                                return Article?.ProteinData != null && Article.ProteinData.Any() && Article.ProteinData.All(p => p.Approved);
-                                }
-                            }
-                            <div class="mt-3">
-                                <button class="btn btn-outline-secondary d-flex align-items-center" 
-                                        type="button" 
-                                        data-bs-toggle="collapse" 
-                                        data-bs-target="#combinationGenerator" 
-                                        aria-expanded="false" 
-                                        aria-controls="combinationGenerator">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-grid-3x3-gap me-2" viewBox="0 0 16 16">
-                                        <path d="M4 2v2H2V2h2zm1 12v-2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V7a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm5 10v-2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V7a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zM14 4V2a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0 5V7a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0 5v-2a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/>
-                                    </svg>
-                                    Protein Data Combination Generator
-                                </button>
-                                
-                                <div class="collapse mt-3" id="combinationGenerator">
-                                    <div class="card card-body bg-light">
-                                        <div class="d-flex flex-column">
-                                            <h6 class="mb-3 text-primary">Generate combinations with a new value</h6>
-                                            
-                                            <div class="row g-3 align-items-end">
-                                                <div class="col-md-4">
-                                                    <label class="form-label mb-1">Select Category:</label>
-                                                    <select class="form-select" @bind="combinationCategory">
-                                                        <option value="0">Protein ID</option>
-                                                        <option value="1">Software Name</option>
-                                                        <option value="2">Software Version</option>
-                                                        <option value="3">Water Model</option>
-                                                        <option value="4">Force Field</option>
-                                                        <option value="5">Temperature (K)</option>
-                                                        <option value="6">Ions</option>
-                                                        <option value="7">Ion Concentration (M)</option>
-                                                        <option value="8">Simulation Length (ns)</option>
-                                                    </select>
-                                                </div>
-                                                
-                                                <div class="col-md-4">
-                                                    <label class="form-label mb-1">New Value:</label>
-                                                    @if (IsNumericCategory(combinationCategory))
-                                                    {
-                                                        <input type="number" step="0.01" class="form-control" @bind="combinationValueNumeric" />
-                                                    }
-                                                    else
-                                                    {
-                                                        <input type="text" class="form-control" @bind="combinationValueText" />
-                                                    }
-                                                </div>
-                                                
-                                                <div class="col-md-4 d-flex align-items-center">
-                                                    <button class="btn btn-primary" @onclick="GenerateCombinations">
-                                                        <span class="d-flex align-items-center">
-                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces-asterisk me-2" viewBox="0 0 16 16">
-                                                                <path fill-rule="evenodd" d="M1.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C2.25 2 1.49 2.759 1.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6ZM14.886 7.9v.164c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456v-1.3c-1.114 0-1.49-.362-1.49-1.456V4.352C14.51 2.759 13.75 2 12.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6ZM7.5 11.5V9.207l-1.621 1.621-.707-.707L6.792 8.5H4.5v-1h2.293L5.172 5.879l.707-.707L7.5 6.792V4.5h1v2.293l1.621-1.621.707.707L9.208 7.5H11.5v1H9.207l1.621 1.621-.707.707L8.5 9.208V11.5h-1Z"/>
-                                                            </svg>
-                                                            Generate Combinations
-                                                        </span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            
-                                            @if (showCombinationResult)
-                                            {
-                                                <div class="mt-3 p-2 border rounded bg-light">
-                                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                                        <span><strong>@combinationCount</strong> new combinations generated</span>
-                                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => showCombinationResult = false">
-                                                            Close
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            }
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                @code{
-                        // Combination generator properties
-                    private int combinationCategory = 0;
-                    private string combinationValueText = "";
-                    private double combinationValueNumeric = 0;
-                    private bool showCombinationResult = false;
-                    private int combinationCount = 0;
-
-                    private bool IsNumericCategory(int category)
-                    {
-                        return category == 5 || category == 7 || category == 8; // Temperature, IonConc, SimLength
-                    }
-
-                    private async Task GenerateCombinations()
-                    {
-                        if (Article?.ProteinData == null || !Article.ProteinData.Any())
+                <button class="btn btn-outline-success" @onclick="ToggleApproveAllProteins" style="transition: background 0.2s, color 0.2s;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="me-2" viewBox="0 0 16 16">
+                        @if (AreAllProteinsApproved())
                         {
-                            await JSRuntime.InvokeVoidAsync("alert", "No protein data available to create combinations from.");
-                            return;
-                        }
-
-
-                        // Get all distinct values for each property
-                        var distinctValues = new Dictionary<string, List<object>>();
-    
-                        // Fixed properties (grouping keys) - except when adding new Protein ID
-                        var fixedProps = combinationCategory != 0 
-                            ? new[] { "ProteinId", "Classification", "Method", "Organism" }
-                            : new[] { "ProteinId" }; // Only group by ProteinId when adding new ones
-
-                        // Variable properties (combination dimensions)
-                        var variableProps = new[] { 
-                            "SoftwareName",     // 1
-                            "SoftwareVersion",  // 2
-                            "WaterModel",       // 3
-                            "ForceField",       // 4
-                            "Temperature",      // 5
-                            "Ions",            // 6
-                            "IonConcentration", // 7
-                            "SimulationLength"  // 8
-                        };
-
-                        // Get distinct values for all variable properties
-                        foreach (var prop in variableProps)
-                        {
-                            distinctValues[prop] = Article.ProteinData
-                                .Select(p => GetPropertyValue(p, prop))
-                                .Distinct()
-                                .ToList();
-                        }
-
-                          // Group by fixed properties
-                        List<IGrouping<dynamic, ProteinData>> proteinGroupsDynamic = null;
-                        List<IGrouping<string, ProteinData>> proteinGroupsString = null;
-
-                        if (combinationCategory != 0)
-                        {
-                            proteinGroupsDynamic = Article.ProteinData
-                                .GroupBy(p => new
-                                {
-                                    p.ProteinId,
-                                    p.Classification,
-                                    p.Method,
-                                    p.Organism
-                                })
-                                .Cast<IGrouping<dynamic, ProteinData>>()
-                                .ToList();
+                            <path d="M2 8a6 6 0 1112 0A6 6 0 012 8zm9.354-2.646a.5.5 0 00-.708-.708L7 8.293 5.354 6.646a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" />
                         }
                         else
                         {
-                            proteinGroupsString = Article.ProteinData
-                                .GroupBy(p => p.ProteinId)
-                                .ToList();
+                            <path d="M8 15A7 7 0 108 1a7 7 0 000 14zm3.354-8.646a.5.5 0 00-.708-.708L7 9.293 5.354 7.646a.5.5 0 10-.708.708l2 2a.5.5 0 00.708 0l4-4z" />
                         }
-
-                        // Group by fixed properties (ProteinId + Classification + Method + Organism)
-                        var proteinGroups = Article.ProteinData
-                            .GroupBy(p => new {
-                                p.ProteinId,
-                                p.Classification,
-                                p.Method,
-                                p.Organism
-                            })
-                            .ToList();
-
-                        var newCombinations = new List<ProteinData>();
-
-                        foreach (var group in proteinGroups)
-                        {
-                            // Create base template with fixed properties
-                            var baseData = new ProteinData
-                            {
-                                ArticleDoi = Article.Doi,
-                                Approved = false,
-                                ProteinId = combinationCategory == 0 ? combinationValueText : group.Key.ProteinId,
-                                Classification = group.Key.Classification,
-                                Method = group.Key.Method,
-                                Organism = group.Key.Organism
-                            };
-
-                            // Get distinct values for variable properties from this group
-                            var groupData = group.ToList();
-                            var variablePropsValues = new Dictionary<string, List<object>>();
-    
-                            foreach (var prop in variableProps)
-                            {
-                                variablePropsValues[prop] = groupData
-                                    .Select(p => GetPropertyValue(p, prop))
-                                    .Distinct()
-                                    .ToList();
-                            }
-
-                            // Generate all combinations
-                            var combinations = new List<Dictionary<string, object>>();
-                            combinations.Add(new Dictionary<string, object>());
-
-                            foreach (var prop in variableProps)
-                            {
-                                var newCombinationsTemp = new List<Dictionary<string, object>>();
-        
-                                foreach (var value in variablePropsValues[prop])
-                                {
-                                    foreach (var combo in combinations)
-                                    {
-                                        var newCombo = new Dictionary<string, object>(combo);
-                                        newCombo[prop] = value;
-                                        newCombinationsTemp.Add(newCombo);
-                                    }
-                                }
-        
-                                combinations = newCombinationsTemp;
-                            }
-
-                            // Apply combinations
-                            foreach (var combo in combinations)
-                            {
-                                var newProteinData = new ProteinData(baseData);
-        
-                                foreach (var kvp in combo)
-                                {
-                                    SetPropertyValue(newProteinData, kvp.Key, kvp.Value);
-                                }
-
-                                // Override the selected combination category if needed
-                                if (combinationCategory != 0)
-                                {
-                                    var propName = variableProps[combinationCategory - 1]; // Adjust index
-                                    object value;
-                                    if (IsNumericCategory(combinationCategory))
-                                    {
-                                        value = combinationValueNumeric;
-                                    }
-                                    else
-                                    {
-                                        value = combinationValueText;
-                                    }
-
-                                    SetPropertyValue(newProteinData, propName, value);
-                                }
-
-                                newCombinations.Add(newProteinData);
-                            }
-                        }
-                        var distinctList = newCombinations
-                            .GroupBy(x => new
-                            {
-                                x.ProteinId,
-                                x.Classification,
-                                SoftwareName = x.SoftwareName?.ToLower(),
-                                WaterModel = x.WaterModel?.ToLower(),
-                                ForceFieldSoftware = x.ForceField?.ToLower(),
-                                SimulationMethod = x.SimulationMethod?.ToLower(),
-                                x.Temperature,
-                                x.Ions,
-                                x.IonConcentration,
-                                x.SimulationLength
-                            })
-                            .Select(g => g.First())
-                            .ToList();
-                        // Add combinations to the article's protein data
-                        foreach (var combination in distinctList)
-                        {
-                            Article.ProteinData.Add(combination);
-                        }
-
-                        combinationCount = distinctList.Count;
-                        showCombinationResult = true;
-
-                        // Show success message
-                        await JSRuntime.InvokeVoidAsync("alert", $"Successfully created {combinationCount} new protein data combinations.");
-                    }
-
-                    // Helper methods to work with properties dynamically
-                    private object GetPropertyValue(ProteinData data, string propertyName)
+                    </svg>
+                    @if (AreAllProteinsApproved())
                     {
-                        return data.GetType().GetProperty(propertyName)?.GetValue(data);
+                        <span>Unmark All as Approved</span>
                     }
-
-                    private void SetPropertyValue(ProteinData data, string propertyName, object value)
+                    else
                     {
-                        var prop = data.GetType().GetProperty(propertyName);
-                        if (prop != null)
-                        {
-                            prop.SetValue(data, value);
-                        }
+                        <span>Mark All as Approved</span>
+                    }
+            </button>
+
+            @code {
+                private void ToggleApproveAllProteins()
+                {
+                    if (Article?.ProteinData == null) return;
+                    bool approve = !AreAllProteinsApproved();
+                    foreach (var protein in Article.ProteinData)
+                    {
+                        protein.Approved = approve;
                     }
                 }
 
-                <style>
-                .protein-table th, .protein-table td {
-                    white-space: nowrap;
-                    vertical-align: middle;
-                    font-size: 0.95rem;
+                private bool AreAllProteinsApproved()
+                {
+                    return Article?.ProteinData != null && Article.ProteinData.Any() && Article.ProteinData.All(p => p.Approved);
                 }
-                .protein-table th {
-                    background: #e3f2fd;
-                    font-weight: 600;
+            }
+
+            <ProteinCombinationGenerator Article="@Article" ArticleChanged="@(async (updatedArticle) => { Article = updatedArticle; await InvokeAsync(StateHasChanged); })"></ProteinCombinationGenerator>
+            <ProteinDataDeleter Article="Article" ArticleChanged="@(async (updatedArticle) => { Article = updatedArticle; await InvokeAsync(StateHasChanged); })"></ProteinDataDeleter>
+        </div>
                 }
-                @@media (max-width: 768px) {
-                    .protein-table th, .protein-table td {
-                        font-size: 0.85rem;
-                        padding: 0.3rem;
-                    }
-                }
-                </style>
+
+        <ul class="nav nav-tabs">
+            <li class="nav-item">
+                <a class="nav-link @(activeTab == "content" ? "active" : "")" href="#" @onclick="() => SetActiveTab(1)">Full Text & Data</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(activeTab == "tables" ? "active" : "")" href="#" @onclick="() => SetActiveTab(2)">Tables</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link @(activeTab == "images" ? "active" : "")" href="#" @onclick="() => SetActiveTab(3)">Images</a>
+            </li>
+        </ul>
+            <div class="tab-content">
+                <div id="content" class="fulltext-section tab-pane @(activeTab == "content" ? "active show" : "fade")">
+
+                    
+
+                
 
                 @if (Article.Chapters != null)
                 {
                     <div class="position-relative">
-                            <div class="highlight-nav position-absolute top-0 end-0 mt-2 me-4">
-                                <button class="btn btn-sm btn-light" @onclick="PrevHighlight">
-                                    &lt;
-                                </button>
-                                <span class="mx-2">@(currentHighlightIndex+1)/@highlightCount</span>
-                                <button class="btn btn-sm btn-light" @onclick="NextHighlight">
-                                    &gt;
-                                </button>
-                                
-                                    <div class="d-flex flex-column align-items-start mt-2">
-                                        @if (termCategory != -1)
-                                        {
-                                            <button class="btn btn-sm btn-danger m-2" @onclick="() => RemoveInvalidRecords(searchTerm, termCategory)">
-                                                Remove All with '@searchTerm' (@keyValuePairs[termCategory])
-                                            </button>
-                                        }
-                                        @if (termCategory == 0 && !searchTerm.Contains("fold", StringComparison.InvariantCultureIgnoreCase))
-                                        {
-                                        <button class="btn btn-sm btn-info m-2" @onclick="() => OpenRCSB(searchTerm)">
-                                            Open RCSB for '@searchTerm'
-                                        </button>
-                                        }
-                                    </div>
-                                    @code{
-                                        public async Task OpenRCSB(string searchTerm)
-                                        {
-                                            var url = $"https://www.rcsb.org/structure/{searchTerm}";
-                                            await JSRuntime.InvokeVoidAsync("open", url, "_blank");
-                                        }
-                                    }
-                                
+                        <div class="highlight-nav position-absolute top-0 end-0 mt-2 me-4">
+                            <button class="btn btn-sm btn-light" @onclick="PrevHighlight">
+                                &lt;
+                            </button>
+                            <span class="mx-2">@(currentHighlightIndex + 1)/@highlightCount</span>
+                            <button class="btn btn-sm btn-light" @onclick="NextHighlight">
+                                &gt;
+                            </button>
+
+                            <div class="d-flex flex-column align-items-start mt-2">
                                 @if (termCategory != -1)
                                 {
-                                    <div class="mt-2 d-flex align-items-center">
-                                        <span class="me-2">Replace with:</span>
-                                        @switch (termCategory)
+                                    <button class="btn btn-sm btn-danger m-2" @onclick="() => RemoveInvalidRecords(searchTerm, termCategory)">
+                                        Remove All with '@searchTerm' (@keyValuePairs[termCategory])
+                                    </button>
+                                }
+                                @if (termCategory == 0 && !searchTerm.Contains("fold", StringComparison.InvariantCultureIgnoreCase))
+                                {
+                                    <button class="btn btn-sm btn-info m-2" @onclick="() => OpenRCSB(searchTerm)">
+                                        Open RCSB for '@searchTerm'
+                                    </button>
+                                    <button class="btn btn-sm btn-info m-2" @onclick="() => OpenMolStarViewer(searchTerm)">
+                                        Open Mol* Viewer for '@searchTerm'
+                                    </button>
+                                    
+                                }
+                        </div>
+                        @code {
+
+                            private string selectedMolStarPDBId = "";
+                            private void OpenMolStarViewer(string searchTerm)
+                            {
+                                if (string.IsNullOrEmpty(searchTerm)) return;
+                                // Check if the search term is a valid PDB ID
+                                if (Regex.IsMatch(searchTerm, @"^[1-9][A-Za-z0-9]{3}$"))
+                                {
+                                    selectedMolStarPDBId = searchTerm;
+                                    StateHasChanged();
+                                }
+                                else
+                                {
+                                    JSRuntime.InvokeVoidAsync("alert", "Invalid PDB ID format. Please enter a valid 4-character PDB ID.");
+                                }
+                            }
+                            private void OnCloseMolStarViewer()
+                            {
+                                selectedMolStarPDBId = "";
+                            }
+                            public async Task OpenRCSB(string searchTerm)
+                            {
+                                var url = $"https://www.rcsb.org/structure/{searchTerm}";
+                                await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+                            }
+
+                        }
+
+                        @if (termCategory != -1)
+                        {
+                            <div class="mt-2 d-flex align-items-center">
+                                <span class="me-2">Replace with:</span>
+                                @switch (termCategory)
+                                {
+                                    case 5: // Temperature
+                                    case 7: // Ion Concentration
+                                    case 8: // Simulation Length
+                                            <input type="number" step="0.01" class="form-control form-control-sm me-2" style="width: 120px;"
+                                                   @bind="replacementValue" />
+                                        break;
+                                    default: // String fields
+                                             <input type="text" class="form-control form-control-sm me-2" style="width: 150px;"
+                                                    @bind="replacementValueText" />
+                                        break;
+                                }
+                                <button class="btn btn-sm btn-warning" @onclick="() => UpdateMatchingRecords(searchTerm, termCategory)">
+                                    Apply
+                                </button>
+                            </div>
+                        }
+
+                                @code {
+
+
+                            private double replacementValue;
+                            private string replacementValueText = "";
+
+                            private async Task UpdateMatchingRecords(string term, int termCategory)
+                            {
+                            if (Article?.ProteinData == null) return;
+
+                            switch (termCategory)
+                            {
+// Replace the selected code block with the following:
+
+                                case 0: // Protein ID
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.ProteinId) || p.ProteinId.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.ProteinId = replacementValueText;
+                                    }
+                                    break;
+                                case 1: // Software Name
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.SoftwareName) || p.SoftwareName.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.SoftwareName = replacementValueText;
+                                    }
+                                    break;
+                                case 2: // Water Model
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.WaterModel) || p.WaterModel.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.WaterModel = replacementValueText;
+                                    }
+                                    break;
+                                case 3: // Force Field
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.ForceField) || p.ForceField.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.ForceField = replacementValueText;
+                                    }
+                                    break;
+                                case 4: // SimulationMethod
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.SimulationMethod) || p.SimulationMethod.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.SimulationMethod = replacementValueText;
+                                    }
+                                    break;
+                                case 5: // Temperature
+                                    if (double.TryParse(term, out double temp))
+                                    {
+                                        foreach (var protein in Article.ProteinData.Where(p => p.Temperature == temp))
                                         {
-                                            case 5: // Temperature
-                                            case 7: // Ion Concentration
-                                            case 8: // Simulation Length
-                                                <input type="number" step="0.01" class="form-control form-control-sm me-2" style="width: 120px;" 
-                                                @bind="replacementValue" />
-                                                break;
-                                            default: // String fields
-                                                <input type="text" class="form-control form-control-sm me-2" style="width: 150px;" 
-                                                @bind="replacementValueText" />
-                                                break;
+                                            protein.Temperature = replacementValue;
                                         }
-                                        <button class="btn btn-sm btn-warning" @onclick="() => UpdateMatchingRecords(searchTerm, termCategory)">
-                                            Apply
+                                    }
+                                    break;
+                                case 6: // Ions
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.Ions) || p.Ions.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.Ions = replacementValueText;
+                                    }
+                                    break;
+                                case 7: // Ion Concentration
+                                    if (double.TryParse(term, out double ionConcentration))
+                                    {
+                                        foreach (var protein in Article.ProteinData.Where(p => p.IonConcentration == ionConcentration))
+                                        {
+                                            protein.IonConcentration = replacementValue;
+                                        }
+                                    }
+                                    break;
+                                case 8: // Simulation Length
+                                    if (double.TryParse(term, out double simulationLength))
+                                    {
+                                        foreach (var protein in Article.ProteinData.Where(p => p.SimulationLength == simulationLength))
+                                        {
+                                            protein.SimulationLength = replacementValue;
+                                        }
+                                    }
+                                    break;
+
+                                case 9: // Software Version
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.SoftwareVersion) || p.SoftwareVersion.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.SoftwareVersion = replacementValueText;
+                                    }
+                                    break;
+
+                                case 10: // Residue
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.Residue) || p.Residue.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.Residue = replacementValueText;
+                                    }
+                                    break;
+                                case 11: // Binder
+                                    foreach (var protein in Article.ProteinData
+                                    .Where(p => string.IsNullOrEmpty(p.Binder) || p.Binder.Equals(term, StringComparison.OrdinalIgnoreCase)))
+                                    {
+                                        protein.Binder = replacementValueText;
+                                    }
+                                    break;
+
+                            }
+
+                            // Reset the search term to clear highlighting
+                            string oldSearchTerm = searchTerm;
+                            searchTerm = "";
+                            ProcessTextForHighlighting();
+
+                            // Notify user of successful update
+                            await JSRuntime.InvokeVoidAsync("alert", $"Updated all {keyValuePairs[termCategory]} values from '{oldSearchTerm}' to '{(termCategory == 5 || termCategory == 7 || termCategory == 8 ? replacementValue.ToString() : replacementValueText)}'");
+
+                            // Reset replacement values
+                            replacementValueText = "";
+                            replacementValue = 0;
+
+                            await InvokeAsync(StateHasChanged);
+
+                            }
+                        }
+                    </div>
+
+
+                    <div class="d-flex justify-content-center align-items-center mb-3">
+                        <div class="form-check me-2" style="justify-content:center">
+                            <input type="checkbox" class="form-check-input m-2" style="position:relative;top:5px" id="ignoreCaseCheckbox" @bind="ignoreCase" />
+                            <label class="form-check m-2">Ignore Case</label>
+                        </div>
+                        <input type="text"
+                               class="form-control me-2"
+                               style="max-width: 300px;"
+                               placeholder="Search full text..."
+                               @bind="searchTerm"
+                               @bind:event="oninput" />
+                        <button class="btn btn-primary"
+                                @onclick="() => HighlightText(searchTerm, -1)">
+                            Highlight
+                        </button>
+                    </div>
+
+                    @code {
+                        private bool ignoreCase = true;
+                    }
+
+                    <div class="article-fulltext-container">
+                        @foreach (var chapter in processedChapters)
+                        {
+                            <div class="chapter-section position-relative">
+                                @if (!string.IsNullOrWhiteSpace(chapter.Title))
+                                {
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="chapter-title">@chapter.Title</div>
+                                        <button class="btn btn-outline-danger btn-sm chapter-remove-btn"
+                                                title="Remove this chapter"
+                                                @onclick="() => DeleteChapter(chapter.Title)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="12" fill="#fff" />
+                                                <path d="M15.5 8.5l-7 7M8.5 8.5l7 7" stroke="#dc3545" stroke-width="2" stroke-linecap="round" />
+                                            </svg>
+                                            <span class="visually-hidden">Remove</span>
                                         </button>
                                     </div>
                                 }
-
-                                @code{
-
-
-                                    private double replacementValue;
-                                    private string replacementValueText;
-
-                                    private void UpdateMatchingRecords(string term, int termCategory)
+                                <div class="chapter-content">
+                                    @foreach (var fragment in chapter.Fragments)
                                     {
-                                        if (Article?.ProteinData == null) return;
-
-                                        switch (termCategory)
+                                        if (fragment.IsMatch)
                                         {
-                                            case 0: // Protein ID
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.ProteinId != null && p.ProteinId.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.ProteinId = replacementValueText;
-                                                }
-                                                break;
-                                            case 1: // Software Name
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.SoftwareName != null && p.SoftwareName.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.SoftwareName = replacementValueText;
-                                                }
-                                                break;
-                                            case 2: // Water Model
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.WaterModel != null && p.WaterModel.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.WaterModel = replacementValueText;
-                                                }
-                                                break;
-                                            case 3: // Force Field
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.ForceField != null && p.ForceField.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.ForceField = replacementValueText;
-                                                }
-                                                break;
-                                            case 4: // SimulationMethod
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.SimulationMethod != null && p.SimulationMethod.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.SimulationMethod = replacementValueText;
-                                                }
-                                                break;
-                                            case 5: // Temperature
-                                                if (double.TryParse(term, out double temp))
-                                                {
-                                                    foreach (var protein in Article.ProteinData.Where(p => p.Temperature == temp))
-                                                    {
-                                                        protein.Temperature = replacementValue;
-                                                    }
-                                                }
-                                                break;
-                                            case 6: // Ions
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.Ions != null && p.Ions.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.Ions = replacementValueText;
-                                                }
-                                                break;
-                                            case 7: // Ion Concentration
-                                                if (double.TryParse(term, out double ionConcentration))
-                                                {
-                                                    foreach (var protein in Article.ProteinData.Where(p => p.IonConcentration == ionConcentration))
-                                                    {
-                                                        protein.IonConcentration = replacementValue;
-                                                    }
-                                                }
-                                                break;
-                                            case 8: // Simulation Length
-                                                if (double.TryParse(term, out double simulationLength))
-                                                {
-                                                    foreach (var protein in Article.ProteinData.Where(p => p.SimulationLength == simulationLength))
-                                                    {
-                                                        protein.SimulationLength = replacementValue;
-                                                    }
-                                                }
-                                                break;
-
-                                            case 9: // Software Version
-                                                foreach (var protein in Article.ProteinData
-                                                    .Where(p => p.SoftwareVersion != null && p.SoftwareVersion.Equals(term, StringComparison.OrdinalIgnoreCase)))
-                                                {
-                                                    protein.SoftwareVersion = replacementValueText;
-                                                }
-                                                break;
+                                            <span class="@fragment.Classes" data-index="@fragment.MatchIndex">@fragment.Text</span>
                                         }
-
-                                        // Reset the search term to clear highlighting
-                                        string oldSearchTerm = searchTerm;
-                                        searchTerm = "";
-                                        ProcessTextForHighlighting();
-        
-                                        // Notify user of successful update
-                                        JSRuntime.InvokeVoidAsync("alert", $"Updated all {keyValuePairs[termCategory]} values from '{oldSearchTerm}' to '{(termCategory == 5 || termCategory == 7 || termCategory == 8 ? replacementValue.ToString() : replacementValueText)}'");
-        
-                                        // Reset replacement values
-                                        replacementValueText = "";
-                                        replacementValue = 0;
-                                    }
-                                }
-                            </div>
-
-                        
-                        <div class="d-flex justify-content-center align-items-center mb-3">
-                            <div class="form-check me-2" style="justify-content:center">
-                                <input type="checkbox" class="form-check-input m-2" style="position:relative;top:5px" id="ignoreCaseCheckbox" @bind="ignoreCase" />
-                                <label class="form-check m-2">Ignore Case</label>
-                            </div>
-                            <input type="text"
-                                    class="form-control me-2"
-                                    style="max-width: 300px;"
-                                    placeholder="Search full text..."
-                                    @bind="searchTerm"
-                                    @bind:event="oninput" />
-                            <button class="btn btn-primary"
-                                    @onclick="() => HighlightText(searchTerm, -1)">
-                                Highlight
-                            </button>
-                        </div>
-
-                        @code{
-                            private bool ignoreCase = true;
-                        }
-    
-                        <div class="article-fulltext-container">
-                            @foreach (var chapter in processedChapters)
-                            {
-                                <div class="chapter-section position-relative">
-                                    @if (!string.IsNullOrWhiteSpace(chapter.Title))
-                                    {
-                                        <div class="d-flex align-items-center justify-content-between mb-2">
-                                            <div class="chapter-title">@chapter.Title</div>
-                                            <button class="btn btn-outline-danger btn-sm chapter-remove-btn"
-                                                    title="Remove this chapter"
-                                                    @onclick="() => DeleteChapter(chapter.Title)">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24">
-                                                    <circle cx="12" cy="12" r="12" fill="#fff" />
-                                                    <path d="M15.5 8.5l-7 7M8.5 8.5l7 7" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>
-                                                </svg>
-                                                <span class="visually-hidden">Remove</span>
-                                            </button>
-                                        </div>
-                                    }
-                                    <div class="chapter-content">
-                                        @foreach (var fragment in chapter.Fragments)
+                                        else
                                         {
-                                            if (fragment.IsMatch)
-                                            {
-                                                <span class="@fragment.Classes" data-index="@fragment.MatchIndex">@fragment.Text</span>
-                                            }
-                                            else
-                                            {
-                                                <span>@fragment.Text</span>
-                                            }
+                                            <span>@fragment.Text</span>
                                         }
-                                    </div>
+                                    }
                                 </div>
-                            }
-                        </div>
+                            </div>
+                        }
                     </div>
-                }
-                else
+                </div>
+                                }
+                                else
                 {
                     <p>No full text available.</p>
                 }
 
                 <style>
-                .article-fulltext-container {
-                    padding: 1.5rem;
-                    font-family: 'Georgia', 'Times New Roman', Times, serif;
-                    font-size: 1.08rem;
-                    line-height: 1.7;
-                    background: #f9fafb;
-                    border-radius: 0.5rem;
-                    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-                    max-height: 60vh;
-                    overflow-y: auto;
-                    max-width: 60%;
-                    margin: 0 auto;
-                }
-                .chapter-section {
-                    margin-bottom: 3rem;
-                    padding: 0 0.5rem;
-                    border-bottom: 1px solid #e0e0e0;
-                }
-
-                .chapter-section:last-child {
-                    border-bottom: none;
-                }
-
-                .chapter-title {
-                    font-family: 'Merriweather', 'Georgia', serif;
-                    font-size: 1.35rem;
-                    font-weight: 700;
-                    color: #2a3b4c;
-                    margin-top: 0.5rem;
-                    margin-bottom: 1rem;
-                    letter-spacing: 0.01em;
-                    text-shadow: 0 1px 0 #fff;
-                }
-
-                .chapter-content p {
-                    margin-bottom: 1.1em;
-                    text-align: justify;
-                    text-justify: inter-word;
-                }
-
-                @@media (max-width: 900px) {
                     .article-fulltext-container {
-                        font-size: 1rem;
-                        padding: 1rem 0.2rem;
+                        padding: 1.5rem;
+                        font-family: 'Georgia', 'Times New Roman', Times, serif;
+                        font-size: 1.08rem;
+                        line-height: 1.7;
+                        background: #f9fafb;
+                        border-radius: 0.5rem;
+                        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+                        max-height: 60vh;
+                        overflow-y: auto;
+                        max-width: 60%;
+                        margin: 0 auto;
                     }
-                    .chapter-title {
-                        font-size: 1.1rem;
-                    }
-                }
-                </style>
 
+                    .chapter-section {
+                        margin-bottom: 3rem;
+                        padding: 0 0.5rem;
+                        border-bottom: 1px solid #e0e0e0;
+                    }
+
+                        .chapter-section:last-child {
+                            border-bottom: none;
+                        }
+
+                    .chapter-title {
+                        font-family: 'Merriweather', 'Georgia', serif;
+                        font-size: 1.35rem;
+                        font-weight: 700;
+                        color: #2a3b4c;
+                        margin-top: 0.5rem;
+                        margin-bottom: 1rem;
+                        letter-spacing: 0.01em;
+                        text-shadow: 0 1px 0 #fff;
+                    }
+
+                    .chapter-content p {
+                        margin-bottom: 1.1em;
+                        text-align: justify;
+                        text-justify: inter-word;
+                    }
+
+                    @@media (max-width: 900px) {
+                        .article-fulltext-container {
+                            font-size: 1rem;
+                            padding: 1rem 0.2rem;
+                        }
+
+                        .chapter-title {
+                            font-size: 1.1rem;
+                        }
+                    }
+                </style>
+                </div>
+                <div id="tables" class="tab-pane @(activeTab == "tables" ? "active show" : "fade")">
+                    <TablesManager Tables="(List<ExtractedTable>) Article.Tables"></TablesManager>
+                </div>
+                <div id="images" class="tab-pane @(activeTab == "images" ? "active show" : "fade")">
+                    <ImagesManager Images="(List<ImageHolder>) Article.Images"></ImagesManager>
+                </div>
             </div>
+
+            @code {
+
+            private Dictionary<int,string> tabNames = new Dictionary<int, string>
+                {
+                    { 1, "content" },
+                    { 2, "tables" },
+                    { 3, "images" }
+                };
+
+                private string activeTab = "content";
+
+                private void SetActiveTab(int tabIndex)
+                {
+                activeTab = tabNames.ContainsKey(tabIndex) ? tabNames[tabIndex] : "content";
+                StateHasChanged();
+                }
+            }
         </div>
 
         <div class="modal-footer">
             <button class="btn btn-secondary" @onclick="Close">Close</button>
         </div>
-    }
+        }
+    
 </SimpleModal>
+
+<FullScreenMolStarPDBViewver pdbId="@selectedMolStarPDBId" OnClose="OnCloseMolStarViewer"></FullScreenMolStarPDBViewver>
 
 <style>
 .upload-label {
@@ -931,7 +609,7 @@ OpenOnFirstRender="false">
              OpenOnFirstRender="false">
     <div class="modal-header">
         <h5 class="modal-title">Discredit Article: @Article?.Title</h5>
-        <button type="button" class="btn-close" @onclick="CloseDiscreditModal"></button>
+        <button type="button" class="btn-close" @onclick="CloseDiscreditModal"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="modal-body">
         <div class="mb-3">
@@ -945,6 +623,8 @@ OpenOnFirstRender="false">
     </div>
 </SimpleModal>
 
+
+
 @code {
     private SimpleModal? modal;
 
@@ -952,11 +632,19 @@ OpenOnFirstRender="false">
     public Article? Article { get; set; }
 
     [Parameter]
+    public ArticlePerProject? ArticlePerProject { get; set; }
+
+    [Parameter]
     public EventCallback<bool> OnModalStateChange { get; set; }
 
     private SimpleModal? discreditModal;
     private string discreditReason = "";
     private ProteinData newProtein = new ProteinData();
+
+    private Dictionary<Project, List<ProteinData>> otherProjectsProteinData = new Dictionary<Project, List<ProteinData>>();
+    private int otherProjectProteinDataSelectedId = 0;
+
+    private ApplicationUser? currentUser;
 
     private Dictionary<int,string> keyValuePairs = new Dictionary<int, string>
     {
@@ -970,7 +658,9 @@ OpenOnFirstRender="false">
         { 6, "Ions" },
         { 7, "Ion Concentration (M)" },
         { 8, "Simulation Length (ns)" },
-        { 9, "Software Version"}
+        { 9, "Software Version"},
+        { 10 , "Residue"},
+        { 11, "Binder"  }
     };
 
     // Highlighting system
@@ -980,8 +670,43 @@ OpenOnFirstRender="false">
     private List<ChapterDisplay> processedChapters = new();
     private int highlightCount = 0;
 
+    private bool isLoading = true;
 
-    public List<object> PBDData { get; set; } = new List<object>();
+    protected override async Task OnParametersSetAsync()
+    {
+
+        if (ArticlePerProject!=null)
+        {
+            isLoading = true;
+            otherProjectsProteinData = await ProteinDataPerProjectService.GetProteinDataPerProjectAsync(Article.Doi);
+            var project = await DatabaseDataHandler.GetByIdAsync<Project>(ArticlePerProject.ProjectId);
+
+            //if project is in otherProjectsProteinData, remove it (check by project.Id))
+            if (otherProjectsProteinData.Keys.Select(p=>p.Id).ToList().Contains(project.Id))
+            {
+                otherProjectsProteinData = otherProjectsProteinData
+                    .Where(kvp => kvp.Key.Id != project.Id)
+                    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            }
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+
+            ProcessTextForHighlighting();
+            isLoading = false;
+        }
+        isLoading = false;
+    }
+
+    //on data copied event handler
+    private async Task ReplaceProteinData(List<ProteinData> proteinData)
+    {
+        isLoading = true;
+        proteinData.ForEach(pd=>pd.ArticleDoi = Article.Doi);
+        proteinData.ForEach(pd => pd.ProjectId = ArticlePerProject.ProjectId);  
+        Article.ProteinData = proteinData.ToList();
+        isLoading = false;
+        await InvokeAsync(StateHasChanged);
+
+    }
 
     private async Task HandleModalStateChange(bool isOpen)
     {
@@ -995,9 +720,6 @@ OpenOnFirstRender="false">
         await JSRuntime.InvokeVoidAsync("window.open", url, "_blank");
     }
 
-    private async Task GetPDBData()
-    {
-    }
 
     private async Task HandlePdfUpload(InputFileChangeEventArgs e)
     {
@@ -1012,6 +734,7 @@ OpenOnFirstRender="false">
             // Optionally show error to user
             return;
         }
+        isLoading = true;
 
         using var stream = file.OpenReadStream(maxFileSize);
         using var ms = new MemoryStream();
@@ -1023,17 +746,25 @@ OpenOnFirstRender="false">
         {
             var htmlFromPDF = ChapterExtractor.ExtractWithPdfPig(pdfBytes);
 
-            var chapters = ArticleExtractorFromHtml.ExtractChapters(htmlFromPDF,Article.Title,"");
+            var extractedData = await ArticleExtractorFromHtml.ExtractChaptersImagesAndTables(htmlFromPDF,Article.Title,"");
+            var chapters = extractedData.Item1;
             chapters.ForEach(c => c.ArticleDoi = Article.Doi);
-
-            await DatabaseDataHandler.ReplaceChaptersAsync(chapters,Article.Doi);
-
+            await ArticleContentService.ReplaceChaptersAsync(chapters,Article.Doi);
             Article.Chapters = chapters;
+
+
+            Article.Tables = extractedData.Item2;
+            Article.Tables.ForEach(t => t.ArticleDoi = Article.Doi);
+            await ArticleContentService.ReplaceTablesAsync(Article.Tables,Article.Doi);
+            Article.Images = extractedData.Item3;
+            Article.Images.ForEach(i => i.ArticleDoi = Article.Doi);
+            await ArticleContentService.ReplaceImagesAsync(Article.Images, Article.Doi);
+
 
             await ExtractProteinData();
 
-
             ProcessTextForHighlighting();
+            isLoading = false;
 
             await InvokeAsync(StateHasChanged);
 
@@ -1047,6 +778,7 @@ OpenOnFirstRender="false">
 
     private async Task ExtractProteinData()
     {
+        isLoading = true;
         var fullText = string.Join("\n\n", Article.Chapters.Select(c => c.Content));
 
         List<string> KnownSoftwareNames = new List<string>();
@@ -1089,6 +821,7 @@ OpenOnFirstRender="false">
 
         Console.WriteLine($"[LOOP] Awaiting {extractTasks.Count} ExtractClassificationOrganismAndMethodAsync tasks for DOI={Article.Doi}");
         await Task.WhenAll(extractTasks.Values).ConfigureAwait(false);
+        PageFetcher.Dispose();
 
         var pdbIdToInfo = new Dictionary<string, (string classification, string organism, string method)>();
 
@@ -1139,14 +872,21 @@ OpenOnFirstRender="false">
                 !string.IsNullOrWhiteSpace(pd.Organism)
             )
             .ToList();
+
+        //remove previously saved proteins
+        await ProteinDataPerProjectService.DeleteProteinDataByProjectIdAndArticleDoiAsync(ArticlePerProject.ProjectId, Article.Doi);
+
         int afterFilter = Article.ProteinData.Count;
         Console.WriteLine($"[LOOP] Filtered protein data for DOI={Article.Doi}: {beforeFilter} -> {afterFilter} records");
+
+        isLoading=false;
+        await InvokeAsync(StateHasChanged);
     }
 
 
     private void ShowDiscreditModal()
     {
-        discreditReason = Article.DiscreditedReason;
+        discreditReason = ArticlePerProject.DiscreditedReason;
         discreditModal?.ShowModal();
     }
 
@@ -1159,34 +899,47 @@ OpenOnFirstRender="false">
     {
         if (Article == null || Article.ProteinData == null)
             return;
-        Article.ProteinData.ToList().ForEach(p => p.ArticleDoi = Article.Doi);
-        await DatabaseDataHandler.SaveOrUpdateProteinDataListAsync(Article.ProteinData.ToList());
+        isLoading = true;
+        await ProteinDataService.SaveOrUpdateProteinDataListAsync(Article.ProteinData.ToList(),Article.Doi,ArticlePerProject.ProjectId);
+        isLoading = false;
     }
 
     private async Task SaveDiscredit()
     {
-        Article.Discredited = true;
-        await DatabaseDataHandler.DiscreditArticle(Article.Doi, discreditReason);
+        CloseDiscreditModal();        
+        await modal?.CloseModal();
+
+        isLoading = true;
+        ArticlePerProject.IsDiscredited = true;
+        ArticlePerProject.ApprovedById = currentUser.Id;
+        await ArticleModerationService.DiscreditArticleInProjectAsync(ArticlePerProject.ProjectId,Article.Doi, discreditReason);
         Article.Chapters = new List<Chapter>();
         Article.ProteinData = new List<ProteinData>();
+        isLoading = false;
 
-        CloseDiscreditModal();
-        await modal?.CloseModal();
     }
 
     private void AddProtein()
     {
+        if (string.IsNullOrWhiteSpace(newProtein.ProteinId))
+        {
+            JSRuntime.InvokeVoidAsync("alert", "Please enter a valid Protein ID.");
+            return;
+        }
         Article.ProteinData.Add(newProtein);
         newProtein = new ProteinData();
     }
 
-    private void RemoveProtein(ProteinData protein)
+    private async Task RemoveProtein(ProteinData protein)
     {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this protein entry?"))
+            return;
         Article.ProteinData.Remove(protein);
     }
 
     private void RemoveInvalidRecords(string term, int termCategory)
     {
+        isLoading = true;
         switch (termCategory)
         {
             case 0: // Protein ID
@@ -1309,7 +1062,33 @@ OpenOnFirstRender="false">
                     }
                 }
                 break;
+            case 10: // Residue
+                if (Article?.ProteinData != null)
+                {
+                    var toRemove = Article.ProteinData
+                        .Where(p => p.Residue != null && p.Residue.Equals(term))
+                        .ToList();
+                    foreach (var item in toRemove)
+                    {
+                        Article.ProteinData.Remove(item);
+                    }
+                }
+                break;
+            case 11: // Binder
+                if (Article?.ProteinData != null)
+                {
+                    var toRemove = Article.ProteinData
+                        .Where(p => p.Binder != null && p.Binder.Equals(term))
+                        .ToList();
+                    foreach (var item in toRemove)
+                    {
+                        Article.ProteinData.Remove(item);
+                    }
+                }
+                break;
         }
+
+        isLoading = false;
 
 
     }
@@ -1324,7 +1103,7 @@ OpenOnFirstRender="false">
         searchTerm = term;
         currentHighlightIndex = 0;
 
-        if(termCategory==5 || termCategory == 7 || termCategory == 10)
+        if(termCategory==5 || termCategory == 7 || termCategory == 8)
             replacementValue = Convert.ToDouble(searchTerm);
         else
             replacementValueText = searchTerm;
@@ -1392,6 +1171,7 @@ OpenOnFirstRender="false">
 
     private async Task NextHighlight()
     {
+        if(highlightCount == 0) return;
         currentHighlightIndex = (currentHighlightIndex + 1) % highlightCount;
         UpdateHighlightClasses();
 
@@ -1405,6 +1185,7 @@ OpenOnFirstRender="false">
 
     private async Task PrevHighlight()
     {
+        if (highlightCount == 0) return;
         currentHighlightIndex = (currentHighlightIndex - 1 + highlightCount) % highlightCount;
         UpdateHighlightClasses();
 
@@ -1440,7 +1221,7 @@ OpenOnFirstRender="false">
 
     private async Task DeleteChapter(string chapterTitle)
     {
-        await DatabaseDataHandler.DeleteChapterAsync(chapterTitle, Article.Doi);
+        await ArticleContentService.DeleteChapterAsync(chapterTitle, Article.Doi);
         Article.Chapters.Remove(Article.Chapters.First(c=>c.Title == chapterTitle));
         processedChapters.RemoveAll(c => c.Title == chapterTitle);
         await InvokeAsync(StateHasChanged);
@@ -1454,10 +1235,50 @@ OpenOnFirstRender="false">
             await JSRuntime.InvokeVoidAsync("alert", "Please approve all protein data before completing the article.");
             return;
         }
-        Article.Completed = true;
+        isLoading = true;
         await UpdateArticleProteinData();
-        await DatabaseDataHandler.CompleteArticleAsync(Article.Doi);
+
+        if (ArticlePerProject == null) return;
+
+
+        //print parameters
+        Console.WriteLine($"Completing article: {Article.Title}");
+        Console.WriteLine($"Project ID: {ArticlePerProject.ProjectId}");
+        Console.WriteLine($"Article DOI: {Article.Doi}");
+        Console.WriteLine($"Approved by: {currentUser.UserName} ({currentUser.Id})");
+        Console.WriteLine($"Discredited: {ArticlePerProject.IsDiscredited}");
+        Console.WriteLine($"Discredited Reason: {ArticlePerProject.DiscreditedReason}");
+
+        await ArticlePerProjectService.CompleteArticlePerProjectByIdArticleDoiAndProjectIdAsync(Article.Doi,ArticlePerProject.ProjectId,ArticlePerProject.Article.ProteinData.ToList(),currentUser.Id);
+
+        ArticlePerProject.IsDiscredited = false;
+        ArticlePerProject.DiscreditedReason = string.Empty;
+        ArticlePerProject.IsApproved = true;
+        ArticlePerProject.DatetimeApproval = DateTime.Now;
+        ArticlePerProject.ApprovedById = currentUser.Id;
+        isLoading = false;
+
+        StateHasChanged();
         await Close();
+    }
+
+    //public EventCallback<(int index, string proteinId, double value)> OnConversionConfirmed { get; set; }
+    private void ConvertValue(int proteinId, int index, double value)
+    {
+       var protein = Article.ProteinData.FirstOrDefault(p => p.Id == proteinId);
+        if (protein == null) return;
+
+        double convertedValue = value; // Replace with actual conversion logic
+        // Update the protein data
+        switch (index)
+        {
+            case 0: protein.Kd = convertedValue; break;
+            case 1: protein.KOff = convertedValue; break;
+            case 2: protein.KOn = convertedValue; break;
+            case 3: protein.FreeBindingEnergy = convertedValue; break;
+            default: return; // Invalid index
+        }
+        StateHasChanged();
     }
 
     // Supporting classes
@@ -1525,6 +1346,37 @@ OpenOnFirstRender="false">
             gap: 10px;
             padding-bottom: 10px;
         }
+
+    /* For Bootstrap modals */
+    #article-detail-modal .modal-dialog {
+        height: 90vh; /* or whatever height you prefer */
+        display: flex;
+        flex-direction: column;
+    }
+
+    #article-detail-modal .modal-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .sticky-modal-header {
+        position: sticky;
+        top: 0;
+        z-index: 1050; /* Bootstrap modals use z-index 1050 */
+        background: white;
+        /* Simple border on all sides */
+        border: 3px solid #b4b4b4;
+        box-shadow: 0 2px 12px rgba(67, 206, 162, 0.08), 0 1.5px 0 rgba(252,87,94,0.08);
+        border-radius: 18px;
+        transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    
+
+    .modal-body {
+        overflow-y: auto;
+        flex: 1;
+    }
 
         /* Table input fields */
         .protein-table input {

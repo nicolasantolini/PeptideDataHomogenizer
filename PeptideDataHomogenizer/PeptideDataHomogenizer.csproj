@@ -4,34 +4,64 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+	  <EnableDefaultContentItems>true</EnableDefaultContentItems>
     <UserSecretsId>aspnet-PeptideDataHomogenizer-d23b1acc-c009-4213-a5e3-7def66758ccc</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
   </PropertyGroup>
+
+	<PropertyGroup>
+		<StaticWebAssetBasePath>_content/$(PeptideDataHomogenizer)</StaticWebAssetBasePath>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<DisableScopedCssBundling>false</DisableScopedCssBundling>
+	</PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.12.1" />
     <PackageReference Include="iTextSharp" Version="5.5.13.4" />
-    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="9.0.6" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.6" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="9.0.7" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.7" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="9.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.7" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="9.0.0" />
     <PackageReference Include="Ollama" Version="1.15.0" />
     <PackageReference Include="PdfPig" Version="0.1.10" />
     <PackageReference Include="PuppeteerExtraSharp" Version="2.0.0" />
     <PackageReference Include="Python.Runtime" Version="2.7.9" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.6" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.6">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.7">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="PuppeteerSharp" Version="15.0.0" />
     <PackageReference Include="SuperSimpleBlazorModal" Version="1.1.4" />
   </ItemGroup>
+	
 
-  <ItemGroup>
+	<!--<ItemGroup>
+		<Content Include="Components/Layout/MainLayout.razor.css" CopyToOutputDirectory="PreserveNewest" />
+		<Content Include="Components/Layout/NavMenu.razor.css" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>-->
+
+	<!--<ItemGroup>
+		<Content Include="Components/Layout/*.razor.css" CopyToOutputDirectory="PreserveNewest" ></Content>
+	</ItemGroup>-->
+
+	<!--<ItemGroup>
+		<None Update="Components/Layout/NavMenu.razor.css" CssScope="nav_menu_identifier" />
+		<None Update="Components/Layout/MainLayout.razor.css" CssScope="main_layout_identifier" />
+	</ItemGroup>-->
+
+	<ItemGroup>
     <ProjectReference Include="..\Entities\Entities.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="wwwroot\imagesTemp\" />
-  </ItemGroup>
+	<ItemGroup>
+	  <Folder Include="wwwroot\organization_logos\" />
+	  <Folder Include="wwwroot\project_logos\" />
+	</ItemGroup>
+	
 
 </Project>

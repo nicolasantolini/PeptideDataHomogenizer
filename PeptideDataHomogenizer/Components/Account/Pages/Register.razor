@@ -1,147 +1,296 @@
-﻿@page "/Register"
+﻿
+@page "/register/{token:long}"
+@rendermode InteractiveServer
 @attribute [AllowAnonymous]
 
 @using System.ComponentModel.DataAnnotations
-@using System.Text
-@using System.Text.Encodings.Web
+@using Entities
 @using Microsoft.AspNetCore.Identity
-@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.AspNetCore.Identity.EntityFrameworkCore
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
 
 @inject UserManager<ApplicationUser> UserManager
-@inject IUserStore<ApplicationUser> UserStore
 @inject SignInManager<ApplicationUser> SignInManager
-@inject IEmailSender<ApplicationUser> EmailSender
 @inject ILogger<Register> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
+@inject DatabaseDataHandler DatabaseDataHandler
+@inject OrganizationService OrganizationService
+@inject UserService UserService
+@inject IJSRuntime JSRuntime
+@inject IUserStore<ApplicationUser> UserStore
 
+<PageTitle>Register - Peptide Data Homogenizer</PageTitle>
 
-<PageTitle>Register</PageTitle>
-
-<h1>Register</h1>
-
-<div class="row">
-    <div class="col-lg-6">
-        <StatusMessage Message="@Message" />
-        <EditForm Model="Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="RegisterUser" FormName="register">
-            <DataAnnotationsValidator />
-            <h2>Create a new account.</h2>
-            <hr />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                <label for="Input.Email">Email</label>
-                <ValidationMessage For="() => Input.Email" class="text-danger" />
-            </div>
-            <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
-                <label for="Input.Password">Password</label>
-                <ValidationMessage For="() => Input.Password" class="text-danger" />
-            </div>
-            <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
-                <label for="Input.ConfirmPassword">Confirm Password</label>
-                <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Register</button>
-        </EditForm>
+@if (loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3">Verifying registration token...</p>
     </div>
-    <div class="col-lg-4 col-lg-offset-2">
-        <section>
-            <h3>Use another service to register.</h3>
-            <hr />
-            <ExternalLoginPicker />
-        </section>
+}
+else if (invalidToken)
+{
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">Invalid Registration Token</h4>
+        <p>The registration token provided is invalid or has expired. Please check the link or contact support.</p>
+        <hr />
+        <p class="mb-0">If you believe this is an error, please reach out to our support team.</p>
     </div>
-</div>
+}
+else
+{
+    <div class="min-vh-80 d-flex align-items-center py-5">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-12 col-lg-12 col-xl-12">
+                    <div class="text-center mb-5">
+                        <div class="d-inline-block bg-primary rounded-circle p-3 mb-3 shadow">
+                            <i class="bi bi-person-plus text-white fs-1"></i>
+                        </div>
+                        <h1 class="display-5 fw-bold text-primary mb-2">Peptide Data Homogenizer</h1>
+                        <p class="text-muted">Create your research account</p>
+                    </div>
+
+                    <div class="card shadow-lg border-0 rounded-3 overflow-hidden">
+                        <div class="card-body p-4 p-md-5">
+                            <div class="text-center mb-4">
+                                <h2 class="h4 fw-bold">Create new account</h2>
+                                <p class="text-muted">Start your peptide research journey</p>
+                            </div>
+
+                            @if (InvitationOrganization != null)
+                            {
+                                <div class="text-center mb-4">
+                                    <img src="data:@InvitationOrganization.ContentType;base64,@(Convert.ToBase64String(InvitationOrganization.LogoData))" alt="@InvitationOrganization.Name Logo"
+                                            class="img-fluid rounded-circle mb-2" style="max-width: 100px; max-height: 100px;" />
+                                    <h3 class="h5 fw-bold text-primary">
+                                        @InvitationOrganization.Name
+                                    </h3>
+                                    <p class="text-muted">
+                                        You are invited to join this organization. Please complete your registration to access its resources.
+                                    </p>
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrEmpty(Message))
+                            {
+                                <div class="alert alert-danger" role="alert">@Message</div>
+                            }
+
+                                <div class="mb-3">
+                                    <label class="form-label">Email address</label>
+                                    <div class="form-control form-control-lg bg-light">
+                                        @email
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">First Name</label>
+                                    <InputText @bind-Value="firstName" class="form-control form-control-lg" aria-required="true" placeholder="John" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Last Name</label>
+                                    <InputText @bind-Value="lastName" class="form-control form-control-lg" aria-required="true" placeholder="Doe" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Title</label>
+                                    <InputSelect @bind-Value="title" class="form-select form-select-lg">
+                                        <option disabled value="">Select Title</option>
+                                        <option value="Dr.">Dr.</option>
+                                        <option value="Professor">Professor</option>
+                                        <option value="Master">Master</option>
+                                        <option value="PhD">PhD</option>
+                                        <option value="Bachelor">Bachelor</option>
+                                        <option value=""> - </option>
+                                    </InputSelect>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Password</label>
+                                    <InputText type="password" @bind-Value="password" class="form-control form-control-lg" autocomplete="new-password" aria-required="true" placeholder="••••••••" />
+
+                                    <div class="form-text">Use 8 or more characters with a mix of letters, numbers & symbols</div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label class="form-label">Confirm Password</label>
+                                    <InputText type="password" @bind-Value="confirmPassword" class="form-control form-control-lg" autocomplete="new-password" aria-required="true" placeholder="••••••••" />
+                                </div>
+
+                            <button type="button" @onclick="RegisterUser" class="btn btn-primary btn-lg w-100 mb-3">
+                                    <i class="bi bi-person-plus me-2"></i>Create Account
+                                </button>
+
+                                <div class="text-center mt-4 pt-2 border-top">
+                                    <p class="small mb-0">
+                                        Already have an account?
+                                        <a href="@(NavigationManager.GetUriWithQueryParameters("Login", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))"
+                                            class="text-decoration-none fw-semibold">
+                                            Sign in here
+                                        </a>
+                                    </p>
+                                </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private IEnumerable<IdentityError>? identityErrors;
+    [Parameter]
+    public long? Token { get; set; }
 
-    [SupplyParameterFromForm]
-    private InputModel Input { get; set; } = new();
+    private bool loading = true;
+    private bool invalidToken = false;
+    private string? Message;
 
-    [SupplyParameterFromQuery]
-    private string? ReturnUrl { get; set; }
+    private string email = "";
+    private string firstName = "";
+    private string lastName = "";
+    private string title = "";
+    private string password = "";
+    private string confirmPassword = "";
+    private string? ReturnUrl;
 
-    private string? Message => identityErrors is null ? null : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
+    private ApplicationUser? applicationUser;
+    private Organization? InvitationOrganization;
 
-    public async Task RegisterUser(EditContext editContext)
+    protected override async Task OnInitializedAsync()
     {
-        var user = CreateUser();
-
-        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
-        var emailStore = GetEmailStore();
-        await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
-        var result = await UserManager.CreateAsync(user, Input.Password);
-
-        if (!result.Succeeded)
+        if (!Token.HasValue || Token.Value <= 0)
         {
-            identityErrors = result.Errors;
+            invalidToken = true;
+            loading = false;
             return;
         }
 
-        Logger.LogInformation("User created a new account with password.");
-
-        var userId = await UserManager.GetUserIdAsync(user);
-        var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
-        code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
-        var callbackUrl = NavigationManager.GetUriWithQueryParameters(
-            NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
-            new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
-
-        await EmailSender.SendConfirmationLinkAsync(user, Input.Email, HtmlEncoder.Default.Encode(callbackUrl));
-
-        if (UserManager.Options.SignIn.RequireConfirmedAccount)
-        {
-            RedirectManager.RedirectTo(
-                "Account/RegisterConfirmation",
-                new() { ["email"] = Input.Email, ["returnUrl"] = ReturnUrl });
-        }
-
-        await SignInManager.SignInAsync(user, isPersistent: false);
-        RedirectManager.RedirectTo(ReturnUrl);
-    }
-
-    private ApplicationUser CreateUser()
-    {
         try
         {
-            return Activator.CreateInstance<ApplicationUser>();
+            applicationUser = await UserService.GetUserByRegistrationTokenAsync(Token.Value);
+            if (applicationUser == null)
+            {
+                invalidToken = true;
+                Message = "Invalid registration token.";
+            }
+            else if (applicationUser.HasRegistered)
+            {
+                NavigationManager.NavigateTo("/Login");
+                return;
+            }
+            else if (applicationUser.RegistrationTokenExpiration == null ||
+                        applicationUser.RegistrationTokenExpiration < DateTime.Now)
+            {
+                invalidToken = true;
+                Message = applicationUser.RegistrationTokenExpiration == null
+                    ? "This registration token has no expiration date."
+                    : "This registration token has expired.";
+            }
+            else
+            {
+                var organizations = await OrganizationService.GetOrganizationsByUserIdAsync(applicationUser.Id);
+                if (organizations.Count == 0)
+                {
+                    invalidToken = true;
+                    Message = "You must be invited to an organization before registering.";
+                    return;
+                }
+                InvitationOrganization = organizations.FirstOrDefault();
+                email = applicationUser.Email;
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
-                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor.");
+            Logger.LogError(ex, "Error during registration token validation");
+            invalidToken = true;
+            Message = "An error occurred while validating your token.";
+        }
+        finally
+        {
+            loading = false;
         }
     }
 
-    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    private async Task RegisterUser()
     {
-        if (!UserManager.SupportsUserEmail)
+        Message = null;
+
+        if (applicationUser == null)
         {
-            throw new NotSupportedException("The default UI requires a user store with email support.");
+            invalidToken = true;
+            Message = "Invalid registration token.";
+            return;
         }
-        return (IUserEmailStore<ApplicationUser>)UserStore;
-    }
+        if (string.IsNullOrWhiteSpace(firstName) || firstName.Length < 2 ||
+            string.IsNullOrWhiteSpace(lastName) || lastName.Length < 2)
+        {
+            Message = "First Name and Last Name must be at least 2 characters long.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+        {
+            Message = "Password must be at least 6 characters long.";
+            return;
+        }
+        if (password != confirmPassword)
+        {
+            Message = "The password and confirmation password do not match.";
+            return;
+        }
 
-    private sealed class InputModel
-    {
-        [Required]
-        [EmailAddress]
-        [Display(Name = "Email")]
-        public string Email { get; set; } = "";
+        try
+        {
+            applicationUser.FirstName = firstName;
+            applicationUser.LastName = lastName;
+            applicationUser.Title = title;
+            applicationUser.HasRegistered = true;
+            applicationUser.EmailConfirmed = true;
+            applicationUser.UserName = applicationUser.ExtendedFullName.Replace(" ","_");
+            await UserStore.SetUserNameAsync(applicationUser, applicationUser.UserName, CancellationToken.None);
 
-        [Required]
-        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
-        [DataType(DataType.Password)]
-        [Display(Name = "Password")]
-        public string Password { get; set; } = "";
+            var removePasswordResult = await UserManager.RemovePasswordAsync(applicationUser);
+            if (!removePasswordResult.Succeeded)
+            {
+                Message = string.Join(", ", removePasswordResult.Errors.Select(e => e.Description));
+                return;
+            }
 
-        [DataType(DataType.Password)]
-        [Display(Name = "Confirm password")]
-        [Compare("Password", ErrorMessage = "The password and confirmation password do not match.")]
-        public string ConfirmPassword { get; set; } = "";
+            var addPasswordResult = await UserManager.AddPasswordAsync(applicationUser, password);
+            if (!addPasswordResult.Succeeded)
+            {
+                Message = string.Join(", ", addPasswordResult.Errors.Select(e => e.Description));
+                return;
+            }
+
+            var updateResult = await UserManager.UpdateAsync(applicationUser);
+            if (!updateResult.Succeeded)
+            {
+                Message = string.Join(", ", updateResult.Errors.Select(e => e.Description));
+                return;
+            }
+
+            Logger.LogInformation("User {Email} completed registration with token.", applicationUser.Email);
+
+            if (UserManager.Options.SignIn.RequireConfirmedAccount)
+            {
+                RedirectManager.RedirectTo("Account/RegisterConfirmation");
+                return;
+            }
+
+            //await SignInManager.SignInAsync(applicationUser, isPersistent: true);
+            NavigationManager.NavigateTo("", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during user registration");
+            Message = "An error occurred during registration.";
+        }
     }
 }

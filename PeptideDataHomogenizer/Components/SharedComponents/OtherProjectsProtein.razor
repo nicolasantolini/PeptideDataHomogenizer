@@ -1,0 +1,408 @@
+﻿@using Entities
+@inject IJSRuntime JSRuntime
+
+<!-- Button to trigger modal -->
+<button @onclick="ShowModal" class="btn btn-outline-primary">
+    <i class="bi bi-copy me-2"></i>Copy From Other Projects (@(OtherProjectsProteinData.Count()))
+</button>
+
+<!-- Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay" @onclick="CloseModal">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h3>Copy Protein Data From Other Projects</h3>
+                <button @onclick="CloseModal" class="btn-close"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Legend -->
+                <div class="similarity-legend mb-4">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="color-dot identical-group me-2"></div>
+                        <span>Identical protein data</span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="color-dot unique-group me-2"></div>
+                        <span>Unique protein data</span>
+                    </div>
+                </div>
+
+                <!-- Organizations & Projects -->
+                <div class="organization-list">
+                    @foreach (var orgGroup in groupedProjects)
+                    {
+                        <div class="organization-card">
+                            <div class="org-header" @onclick="() => ToggleOrganization(orgGroup.Key.Id)">
+                                <div class="org-info">
+                                    @if (orgGroup.Key.LogoData != null && orgGroup.Key.LogoData.Length > 0)
+                                    {
+                                        <img src="data:@orgGroup.Key.ContentType;base64,@(Convert.ToBase64String(orgGroup.Key.LogoData))" class="rounded-circle border"
+                                             style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"/>
+                                    }
+                                    else
+                                    {
+                                        <div class="org-logo generic-logo">
+                                            <i class="bi bi-building"></i>
+                                        </div>
+                                    }
+                                    <h4>@orgGroup.Key.Name</h4>
+                                </div>
+                                <i class="bi @(expandedOrganizations.Contains(orgGroup.Key.Id) ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                            </div>
+
+                            @if (expandedOrganizations.Contains(orgGroup.Key.Id))
+                            {
+                                <div class="project-list">
+                                    @foreach (var project in orgGroup)
+                                    {
+                                        <div class="project-card @GetProjectCardClass(project.Key)">
+                                            <div class="project-info" @onclick="() => SelectProject(project.Key, project.Value)">
+                                                @if (project.Key.LogoData != null && project.Key.LogoData.Length > 0)
+                                                {
+                                                    <img src="data:@project.Key.ContentType;base64,@(Convert.ToBase64String(project.Key.LogoData))"
+                                                    class="project-logo" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="project-logo generic-logo">
+                                                        <i class="bi bi-kanban"></i>
+                                                    </div>
+                                                }
+                                                <div class="project-details">
+                                                    <h5>@project.Key.Name</h5>
+                                                    <small>@project.Value.Count protein records</small>
+                                                </div>
+                                            </div>
+                                            <div class="project-actions">
+                                                <button @onclick="() => SelectProject(project.Key, project.Value)"
+                                                        class="btn btn-sm btn-outline-primary">
+                                                    Select
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Confirmation Dialog -->
+@if (showConfirmation)
+{
+    <div class="confirmation-dialog">
+        <div class="confirmation-content">
+            <h4>Confirm Data Replacement</h4>
+            <p>This will replace all current protein data with @selectedProjectName's data.</p>
+            <div class="confirmation-buttons">
+                <button @onclick="ConfirmReplace" class="btn btn-primary">Confirm</button>
+                <button @onclick="CancelReplace" class="btn btn-outline-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Dictionary<Project, List<ProteinData>> OtherProjectsProteinData { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<List<ProteinData>> OnDataCopied { get; set; }
+
+    private bool showModal = false;
+    private bool showConfirmation = false;
+    private List<ProteinData> selectedProteinData = new();
+    private string selectedProjectName = string.Empty;
+    private HashSet<int> expandedOrganizations = new();
+    private Dictionary<int, List<KeyValuePair<Project, List<ProteinData>>>> similarityGroups = new();
+
+    // Group projects by organization and similarity
+    private IOrderedEnumerable<IGrouping<Organization, KeyValuePair<Project, List<ProteinData>>>> groupedProjects =>
+        OtherProjectsProteinData
+            .GroupBy(p => p.Key.Organization)
+            .OrderBy(g => g.Key.Name);
+
+    protected override void OnInitialized()
+    {
+        CalculateSimilarityGroups();
+    }
+
+    private void CalculateSimilarityGroups()
+    {
+        similarityGroups.Clear();
+        var allProjects = OtherProjectsProteinData.ToList();
+        int groupId = 0;
+
+        while (allProjects.Any())
+        {
+            var current = allProjects.First();
+            var matches = allProjects
+                .Where(p => CompareProteinDataLists(current.Value, p.Value))
+                .ToList();
+
+            foreach (var match in matches)
+            {
+                similarityGroups[groupId] = matches;
+                allProjects.Remove(match);
+            }
+
+            groupId++;
+        }
+    }
+
+    public static bool CompareProteinDataLists(List<ProteinData> list1, List<ProteinData> list2)
+    {
+        if (list1.Count != list2.Count) return false;
+
+        var matchedIndices = new HashSet<int>();
+        foreach (var protein1 in list1)
+        {
+            bool foundMatch = false;
+            for (int i = 0; i < list2.Count; i++)
+            {
+                if (!matchedIndices.Contains(i) && protein1.AreEquals(list2[i]))
+                {
+                    matchedIndices.Add(i);
+                    foundMatch = true;
+                    break;
+                }
+            }
+            if (!foundMatch) return false;
+        }
+        return true;
+    }
+
+    private string GetProjectCardClass(Project project)
+    {
+        foreach (var group in similarityGroups)
+        {
+            if (group.Value.Any(p => p.Key.Id == project.Id))
+            {
+                return group.Value.Count > 1 ? "identical-group" : "unique-group";
+            }
+        }
+        return "";
+    }
+
+    private void ToggleOrganization(int orgId)
+    {
+        if (expandedOrganizations.Contains(orgId))
+        {
+            expandedOrganizations.Remove(orgId);
+        }
+        else
+        {
+            expandedOrganizations.Add(orgId);
+        }
+    }
+
+    private void SelectProject(Project project, List<ProteinData> proteinData)
+    {
+        selectedProteinData = proteinData;
+        selectedProjectName = project.Name;
+        showConfirmation = true;
+    }
+
+    private async Task ConfirmReplace()
+    {
+        selectedProteinData.ForEach(spd => spd.Id = 0);
+        showConfirmation = false;
+        showModal = false;
+        await OnDataCopied.InvokeAsync(selectedProteinData);
+    }
+
+    private void CancelReplace()
+    {
+        showConfirmation = false;
+    }
+
+    private void ShowModal()
+    {
+        showModal = true;
+        CalculateSimilarityGroups(); // Refresh groups when opening
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+}
+
+<style>
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 900px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+    }
+
+    /* Organization & Project Cards */
+    .organization-card {
+        margin-bottom: 1rem;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .org-header {
+        padding: 1rem 1.5rem;
+        background: #f8f9fa;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+        .org-header:hover {
+            background: #e9ecef;
+        }
+
+    .org-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .org-logo, .project-logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        object-fit: contain;
+    }
+
+    .generic-logo {
+        background: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+    }
+
+    .project-list {
+        padding: 0.5rem;
+        background: white;
+    }
+
+    .project-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        transition: all 0.2s;
+    }
+
+        .project-card:hover {
+            background: #f8f9fa;
+        }
+
+    .project-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex: 1;
+        cursor: pointer;
+    }
+
+    .project-details {
+        flex: 1;
+    }
+
+    /* Similarity Groups */
+    .identical-group {
+        border-left: 4px solid #28a745;
+    }
+
+    .unique-group {
+        border-left: 4px solid #6c757d;
+    }
+
+    .color-dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+    }
+
+        .color-dot.identical-group {
+            background: #28a745;
+        }
+
+        .color-dot.unique-group {
+            background: #6c757d;
+        }
+
+    .similarity-legend {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 6px;
+    }
+
+    /* Confirmation Dialog */
+    .confirmation-dialog {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1060;
+    }
+
+    .confirmation-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        max-width: 500px;
+        width: 90%;
+        text-align: center;
+    }
+
+    .confirmation-buttons {
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+</style>

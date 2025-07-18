@@ -13,6 +13,7 @@ using static PeptideDataHomogenizer.Tools.HtmlTools.ArticleExtractorFromHtml;
 using Entities;
 using PeptideDataHomogenizer.Data;
 using Microsoft.AspNetCore.Mvc;
+using PeptideDataHomogenizer.Services;
 
 namespace PeptideDataHomogenizer.Tools.PubMedSearch
 {
@@ -30,8 +31,9 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
         private const int MinRequestIntervalMs = 333;
 
         private DatabaseDataHandler DatabaseDataHandler;
+        private ArticleService _articleService;
 
-        public EUtilitiesService(HttpClient http, [FromServices] DatabaseDataHandler databaseDataHandler)
+        public EUtilitiesService(HttpClient http, [FromServices] DatabaseDataHandler databaseDataHandler,[FromServices] ArticleService articleService)
         {
             _http = http;
             _http.BaseAddress = new Uri(BaseUrl);
@@ -40,6 +42,7 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
                 _http.DefaultRequestHeaders.Add("User-Agent", "NCBIApiClient/1.0");
             }
             DatabaseDataHandler = databaseDataHandler;
+            _articleService = articleService;
         }
 
         public async Task<SearchResults> SearchArticlesAsync(
@@ -99,7 +102,7 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
         {
             var articles = new List<ArticleDetail>();
 
-            var dbArticles = await DatabaseDataHandler.GetArticlesByPubMedIdsAsync(ids.Where(id => id != null).ToList());
+            var dbArticles = await _articleService.GetArticlesByPubMedIdsAsync(ids.Where(id => id != null).ToList());
 
             if (dbArticles != null && dbArticles.Count > 0)
             {

@@ -1,9 +1,28 @@
 ﻿@page "/medal-table"
 @using System.Collections.Generic
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
 
 @rendermode InteractiveServer
-@inject DatabaseDataHandler DatabaseDataHandler
+@inject ArticleModerationService ArticleModerationService
+@inject ProteinDataService ProteinDataService
+@inject ProteinDataPerProjectService ProteinDataPerProjectService
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@inject IJSRuntime JSRuntime
+
+
+@if(projectId == null || projectId < 1)
+{
+    <div class="alert alert-warning">
+        Please select a project to view your medal collection.
+    </div>
+    return;
+}
+else{
 
 <div class="medal-collection-container">
     <div class="header-section text-center mb-5">
@@ -52,6 +71,7 @@
         }
     </div>
 </div>
+}
 
 @code {
 
@@ -59,15 +79,27 @@
     private int totalDiscreditedItemsCount = 0;
     private List<MedalCategory> medalCategories = new List<MedalCategory>();
 
+    private int? projectId = 0;
+
+    private ApplicationUser currentUser;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            projectId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+
+            if (projectId == null || currentUser == null)
+            {
+                // Handle the case where projectId or currentUser is not set
+                return;
+            }
 
             medalCategories = new List<MedalCategory>();
             string rootpath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images");
-            approvedProteinsCount = await DatabaseDataHandler.GetApprovedProteinsCountAsync();
-            totalDiscreditedItemsCount = await DatabaseDataHandler.GetDiscreditedCountsAsync();
+            approvedProteinsCount = await ProteinDataPerProjectService.GetApprovedProteinsCountByProjectIdAndUserIdAsync(projectId.Value,currentUser.Id);
+            totalDiscreditedItemsCount = await ArticleModerationService.GetDiscreditedArticlesCountByProjectIdAndUserIdAsync(projectId.Value,currentUser.Id);
 
             medalCategories.Add(new MedalCategory
             {
@@ -79,22 +111,22 @@
             {
                 Name = "Protein Pioneer",
                 ImageName = "images/bronze-extractor.png",
-                Description = "Unlocked after approving 100 proteins.",
-                IsUnlocked = approvedProteinsCount >= 100
+                Description = "Unlocked after approving 1000 proteins.",
+                IsUnlocked = approvedProteinsCount >= 1000
             },
             new Medal
             {
                 Name = "Protein Specialist",
                 ImageName = "images/silver-extractor.png",
-                Description = "Unlocked after approving 250 proteins.",
-                IsUnlocked = approvedProteinsCount >= 250
+                Description = "Unlocked after approving 2500 proteins.",
+                IsUnlocked = approvedProteinsCount >= 2500
             },
             new Medal
             {
                 Name = "Protein Master",
                 ImageName = "images/gold-extractor.png",
-                Description = "Unlocked after approving 500 proteins.",
-                IsUnlocked = approvedProteinsCount >= 500
+                Description = "Unlocked after approving 5000 proteins.",
+                IsUnlocked = approvedProteinsCount >= 5000
             }
         }
             });

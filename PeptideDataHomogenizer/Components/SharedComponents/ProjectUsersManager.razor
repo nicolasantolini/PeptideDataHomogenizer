@@ -1,0 +1,537 @@
+﻿@using Entities
+@using Microsoft.AspNetCore.Identity
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@inject UserProjectService UserProjectService
+@inject UserOrganizationService UserOrganizationService
+@inject OrganizationService OrganizationService
+@inject DatabaseDataHandler DataHandler
+@inject IJSRuntime JSRuntime
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@rendermode InteractiveServer
+
+<div class="card mb-4">
+    <div class="card-body">
+        @if(UserRole=="admin"){
+        <h5 class="card-title mb-3">Manage Project Users</h5>
+
+        <!-- Organization Selection -->
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6>Select Organization</h6>
+                <div class="input-group" style="width: 300px;">
+                    <input type="text" @bind="OrganizationSearchTerm" @bind:event="oninput"
+                           class="form-control" placeholder="Search organizations..." />
+                    <span class="input-group-text">
+                        <i class="bi bi-search"></i>
+                    </span>
+                </div>
+            </div>
+
+            @if (FilteredOrganizations.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Logo</th>
+                                <th>Name</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var org in FilteredOrganizations.Take(5))
+                            {
+                                <tr @onclick="() => SelectOrganization(org)"
+                                    style="cursor: pointer;"
+                                    class="@(SelectedOrganization?.Id == org.Id ? "table-primary" : "")">
+                                    <td>
+                                        @if (org.LogoData != null && org.LogoData.Length > 0)
+                                        {
+                                            <img src="data:@org.ContentType;base64,@(Convert.ToBase64String(org.LogoData))" class="rounded-circle border"
+                                                    style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;" />
+                                        }
+                                        else
+                                        {
+                                            <div class="rounded-circle border bg-light d-flex justify-content-center align-items-center"
+                                                 style="width: 40px; height: 40px;">
+                                                <i class="bi bi-building text-secondary"></i>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>@org.Name</td>
+                                    <td>
+                                        <button @onclick="() => SelectOrganization(org)"
+                                                class="btn btn-sm btn-outline-primary">
+                                            Select
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(OrganizationSearchTerm))
+            {
+                <div class="alert alert-info">No organizations found matching your search.</div>
+            }
+        </div>
+
+        <!-- User Management -->
+        @if (SelectedOrganization != null)
+        {
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6>Manage Users for @SelectedOrganization.Name</h6>
+                    <div class="input-group" style="width: 300px;">
+                        <input type="text" @bind="UserSearchTerm" @bind:event="oninput"
+                               class="form-control" placeholder="Search users..." />
+                        <span class="input-group-text">
+                            <i class="bi bi-search"></i>
+                        </span>
+                    </div>
+                </div>
+
+                @if (IsLoadingUsers)
+                {
+                    <div class="text-center my-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (VisibleUsers.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>User</th>
+                                    <th>Status</th>
+                                    <th>Role</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in VisibleUsers)
+                                {
+                                    var userState = GetUserState(user.User.Id);
+                                    <tr>
+                                        <td>@user.User.ExtendedFullName</td>
+                                        <td>
+                                            <span class="badge @(userState.IsInProject ? "bg-success" : "bg-secondary")">
+                                                @(userState.IsInProject ? "Added" : "Not Added")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (userState.IsInProject)
+                                            {
+                                                <div class="d-flex align-items-center">
+                                                    <select class="form-select form-select-sm"
+                                                            @bind="userState.Role"
+                                                            @bind:event="onchange"
+                                                            @bind:after="async ()=>await UpdateUserRole(userState)">
+                                                        <option value="visitor">Visitor</option>
+                                                        <option value="editor">Editor</option>
+                                                        <option value="admin">Admin</option>
+                                                    </select>
+                                                    @if (userState.IsUpdating)
+                                                    {
+                                                        <div class="ms-2 spinner-border spinner-border-sm text-primary" role="status">
+                                                            <span class="visually-hidden">Updating...</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <select class="form-select form-select-sm"
+                                                        @bind="userState.NewRole">
+                                                    <option value="">Select role...</option>
+                                                    <option value="visitor">Visitor</option>
+                                                    <option value="editor">Editor</option>
+                                                    <option value="admin">Admin</option>
+                                                </select>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (userState.IsInProject)
+                                            {
+                                                <button @onclick="() => RemoveUser(userState)"
+                                                        class="btn btn-sm btn-outline-danger"
+                                                        disabled="@userState.IsRemoving">
+                                                    @if (userState.IsRemoving)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="bi bi-person-dash"></i>
+                                                    }
+                                                    Remove
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button @onclick="() => AddUser(userState)"
+                                                        class="btn btn-sm btn-outline-primary"
+                                                        disabled="@(string.IsNullOrEmpty(userState.NewRole) || userState.IsAdding)">
+                                                    @if (userState.IsAdding)
+                                                    {
+                                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="bi bi-person-plus"></i>
+                                                    }
+                                                    Add
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info">No users found in this organization.</div>
+                }
+            </div>
+            }
+        }
+        else if(UserRole=="visitor" || UserRole=="editor")
+        {
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-body p-4">
+                    <h5 class="card-title mb-4 fw-normal text-primary">Project Team Members</h5>
+
+                    @if (ProjectUsers.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-borderless align-middle">
+                                <thead>
+                                    <tr class="text-muted" style="font-size: 14px; letter-spacing: 0.5px;">
+                                        <th class="ps-2">User</th>
+                                        <th>Role</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var projectUser in ProjectUsers.OrderBy(u => u.User.ExtendedFullName))
+                                    {
+                                        <tr class="hover-bg-light">
+                                            <td class="ps-2">
+                                                <div class="d-flex align-items-center">
+                                                    <div class="user-avatar bg-light text-primary rounded-circle d-flex align-items-center justify-content-center me-3"
+                                                         style="width: 38px; height: 38px; font-size: 16px;">
+                                                        @projectUser.User.ExtendedFullName.Substring(0, 1)
+                                                    </div>
+                                                    <div>
+                                                        <div class="fw-medium">@projectUser.User.ExtendedFullName</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetRoleBadgeClass(projectUser.Role)">
+                                                    @GetRoleDisplayName(projectUser.Role)
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center p-4">
+                            <div class="mb-3">
+                                <i class="bi bi-people text-secondary" style="font-size: 2rem;"></i>
+                            </div>
+                            <p class="text-muted">No team members have been added to this project yet.</p>
+                        </div>
+                    }
+            </div>
+        </div>
+
+        @code {
+            private string GetRoleBadgeClass(string role) => role switch
+            {
+                "admin" => "bg-primary bg-opacity-10 text-primary",
+                "editor" => "bg-success bg-opacity-10 text-success",
+                "visitor" => "bg-info bg-opacity-10 text-info",
+                _ => "bg-secondary bg-opacity-10 text-secondary"
+            };
+
+            private string GetRoleDisplayName(string role) => role switch
+            {
+                "admin" => "Admin",
+                "editor" => "Editor",
+                "visitor" => "Visitor",
+                _ => role
+            };
+        }
+                }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Project CurrentProject { get; set; }
+
+    [Parameter]
+    public string UserRole { get; set; } = "";
+
+    private List<Organization> Organizations = new();
+    private List<ProjectUser> ProjectUsers = new();
+    private List<OrganizationUser> OrganizationUsers = new();
+    private Organization? SelectedOrganization;
+    private string OrganizationSearchTerm = string.Empty;
+    private string UserSearchTerm = string.Empty;
+    private bool IsLoadingUsers = false;
+
+    private class UserState
+    {
+        public string UserId { get; set; }
+        public string Role { get; set; }
+        public string NewRole { get; set; } = "visitor"; // Default role
+        public bool IsInProject { get; set; }
+        public bool IsUpdating { get; set; }
+        public bool IsAdding { get; set; }
+        public bool IsRemoving { get; set; }
+    }
+
+    private Dictionary<string, UserState> UserStates = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Console.WriteLine("component:"+UserRole);
+        await LoadOrganizations();
+        await LoadProjectUsers();
+        if (Organizations.Any(o => o.Id == CurrentProject.OrganizationId))
+        {
+            await SelectOrganization(Organizations.FirstOrDefault(o => o.Id == CurrentProject.OrganizationId));
+        }
+
+    }
+
+    private IEnumerable<Organization> FilteredOrganizations => Organizations
+        .Where(o => string.IsNullOrEmpty(OrganizationSearchTerm) ||
+                    o.Name.Contains(OrganizationSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(o => o.Name);
+
+    private IEnumerable<OrganizationUser> VisibleUsers => OrganizationUsers
+        .Where(u => string.IsNullOrEmpty(UserSearchTerm) ||
+                    u.User.ExtendedFullName.Contains(UserSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(u => u.User.ExtendedFullName)
+        .Take(10);
+
+    private UserState GetUserState(string userId)
+    {
+        if (!UserStates.TryGetValue(userId, out var state))
+        {
+            var projectUser = ProjectUsers.FirstOrDefault(pu => pu.User.Id == userId);
+            state = new UserState
+            {
+                UserId = userId,
+                Role = projectUser?.Role ?? "visitor",
+                NewRole = "visitor",
+                IsInProject = projectUser != null
+            };
+            UserStates[userId] = state;
+        }
+        return state;
+    }
+
+    private async Task LoadOrganizations()
+    {
+        Organizations = await DataHandler.GetAllAsync<Organization>();
+        StateHasChanged();
+    }
+
+    private async Task LoadProjectUsers()
+    {
+        if (CurrentProject == null) return;
+        ProjectUsers.Clear();
+
+        if (CurrentProject != null)
+        {
+            var users = await UserProjectService.GetUsersByProjectIdAsync(CurrentProject.Id);
+            foreach(var user in users)
+            {
+                var role = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(CurrentProject.Id, user.Id);
+                ProjectUsers.Add(new ProjectUser
+                {
+                    User = user,
+                    Role = role // Default role for project users
+                });
+            }
+        }
+        StateHasChanged();
+    }
+
+    private async Task SelectOrganization(Organization org)
+    {
+
+        IsLoadingUsers = true;
+        SelectedOrganization = org;
+        StateHasChanged();
+
+        try
+        {
+            var users = await UserOrganizationService.GetUsersByOrganizationIdAsync(org.Id);
+            OrganizationUsers = users.Select(u => new OrganizationUser
+            {
+                User = u,
+                OrganizationId = org.Id
+            }).ToList();
+
+            // Initialize user states
+            foreach (var user in users)
+            {
+                var projectUser = ProjectUsers.FirstOrDefault(pu => pu.User.Id == user.Id);
+                UserStates[user.Id] = new UserState
+                {
+                    UserId = user.Id,
+                    Role = projectUser?.Role ?? "visitor",
+                    NewRole = "visitor",
+                    IsInProject = projectUser != null
+                };
+            }
+        }
+        finally
+        {
+            IsLoadingUsers = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddUser(UserState state)
+    {
+        if (string.IsNullOrEmpty(state.NewRole)) return;
+
+        state.IsAdding = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserProjectService.AddUserToProjectAsync(state.UserId, CurrentProject.Id, state.NewRole);
+
+            var role = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(CurrentProject.OrganizationId,state.UserId);
+            if(role == null)
+            {
+                await UserOrganizationService.AddUserToOrganizationAsync(state.UserId, CurrentProject.OrganizationId, "visitor");
+            }
+
+
+            // Update local state
+            state.IsInProject = true;
+            state.Role = state.NewRole;
+            state.NewRole = "visitor";
+
+            // Add to ProjectUsers if not already there
+            if (!ProjectUsers.Any(pu => pu.User.Id == state.UserId))
+            {
+                var user = OrganizationUsers.FirstOrDefault(u => u.User.Id == state.UserId)?.User;
+                if (user != null)
+                {
+                    ProjectUsers.Add(new ProjectUser
+                    {
+                        User = user,
+                        Role = state.Role
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to add user: {ex.Message}");
+        }
+        finally
+        {
+            state.IsAdding = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveUser(UserState state)
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to remove this user from the project?"))
+        {
+            return;
+        }
+
+        state.IsRemoving = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserProjectService.RemoveUserFromProjectAsync(state.UserId, CurrentProject.Id);
+
+            // Update local state
+            state.IsInProject = false;
+            state.NewRole = "visitor";
+            ProjectUsers.RemoveAll(pu => pu.User.Id == state.UserId);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to remove user: {ex.Message}");
+        }
+        finally
+        {
+            state.IsRemoving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateUserRole(UserState state)
+    {
+        if (string.IsNullOrEmpty(state.Role)) return;
+
+        await JSRuntime.InvokeVoidAsync("alert", "The role of the user will be updated to "+state.Role);
+        state.IsUpdating = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserProjectService.UpdateRoleByUserIdAndProjectIdAsync(state.UserId, CurrentProject.Id, state.Role);
+
+            // Update local state
+            var projectUser = ProjectUsers.FirstOrDefault(pu => pu.User.Id == state.UserId);
+            if (projectUser != null)
+            {
+                projectUser.Role = state.Role;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to update role: {ex.Message}");
+            // Revert the change
+            var originalRole = ProjectUsers.FirstOrDefault(pu => pu.User.Id == state.UserId)?.Role ?? "visitor";
+            state.Role = originalRole;
+        }
+        finally
+        {
+            await LoadProjectUsers();
+            state.IsUpdating = false;
+            StateHasChanged();
+        }
+    }
+
+    private class ProjectUser
+    {
+        public ApplicationUser User { get; set; }
+        public string Role { get; set; }
+    }
+
+    private class OrganizationUser
+    {
+        public ApplicationUser User { get; set; }
+        public int OrganizationId { get; set; }
+    }
+}

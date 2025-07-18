@@ -17,7 +17,7 @@ namespace PeptideDataHomogenizer.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.5")
+                .HasAnnotation("ProductVersion", "9.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -25,56 +25,95 @@ namespace PeptideDataHomogenizer.Migrations
             modelBuilder.Entity("Entities.Article", b =>
                 {
                     b.Property<string>("Doi")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("nvarchar(450)")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
                         .HasColumnName("doi");
 
                     b.Property<string>("Abstract")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
-                        .HasColumnName("abstract");
+                        .HasAnnotation("Relational:JsonPropertyName", "abstract");
 
                     b.Property<string>("Authors")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
-                        .HasColumnName("authors");
-
-                    b.Property<bool>("Completed")
-                        .HasColumnType("bit")
-                        .HasColumnName("completed");
-
-                    b.Property<bool>("Discredited")
-                        .HasColumnType("bit")
-                        .HasColumnName("discredited");
-
-                    b.Property<string>("DiscreditedReason")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("discredited_reason");
+                        .HasAnnotation("Relational:JsonPropertyName", "authors");
 
                     b.Property<string>("Journal")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("journal");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasAnnotation("Relational:JsonPropertyName", "journal");
 
                     b.Property<string>("PubMedId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("PubMedId");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasAnnotation("Relational:JsonPropertyName", "pubMedId");
 
                     b.Property<DateTime>("PublicationDate")
                         .HasColumnType("datetime2")
-                        .HasColumnName("publication_date");
+                        .HasAnnotation("Relational:JsonPropertyName", "publicationDate");
 
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(600)
                         .HasColumnType("nvarchar(600)")
-                        .HasColumnName("title");
+                        .HasAnnotation("Relational:JsonPropertyName", "title");
 
                     b.HasKey("Doi");
 
                     b.ToTable("Articles");
+                });
+
+            modelBuilder.Entity("Entities.ArticlePerProject", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApprovedById")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("approved_by");
+
+                    b.Property<string>("ArticleId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("ArticleId");
+
+                    b.Property<DateTime?>("DatetimeApproval")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("datetime_approval");
+
+                    b.Property<string>("DiscreditedReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("DiscreditedReason");
+
+                    b.Property<bool>("IsApproved")
+                        .HasColumnType("bit")
+                        .HasColumnName("IsApproved");
+
+                    b.Property<bool>("IsDiscredited")
+                        .HasColumnType("bit")
+                        .HasColumnName("IsDiscredited");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("ProjectId");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("ArticlePerProjects");
                 });
 
             modelBuilder.Entity("Entities.Chapter", b =>
@@ -88,7 +127,7 @@ namespace PeptideDataHomogenizer.Migrations
 
                     b.Property<string>("ArticleDoi")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)")
+                        .HasColumnType("nvarchar(255)")
                         .HasColumnName("article_doi");
 
                     b.Property<string>("Content")
@@ -112,18 +151,249 @@ namespace PeptideDataHomogenizer.Migrations
                     b.HasIndex("ArticleDoi");
 
                     b.ToTable("Chapters");
+
+                    b.HasAnnotation("Relational:JsonPropertyName", "chapters");
                 });
 
             modelBuilder.Entity("Entities.DiscreditedJournal", b =>
                 {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DiscreditedById")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("discredited_by");
+
+                    b.Property<string>("DiscreditedReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("discredited_reason");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("project_id");
+
                     b.Property<string>("Title")
+                        .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("title");
 
-                    b.HasKey("Title");
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
 
                     b.ToTable("DiscreditedJournals");
+                });
+
+            modelBuilder.Entity("Entities.DiscreditedPublisher", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("DiscreditedById")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("discredited_by");
+
+                    b.Property<string>("DiscreditedReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("discredited_reason");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("DiscreditedPublishers");
+                });
+
+            modelBuilder.Entity("Entities.ExtractedTable", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ArticleDoi")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("article_doi");
+
+                    b.Property<string>("Caption")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("caption");
+
+                    b.Property<string>("Rows")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("tableJson");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleDoi");
+
+                    b.ToTable("Tables");
+
+                    b.HasAnnotation("Relational:JsonPropertyName", "tables");
+                });
+
+            modelBuilder.Entity("Entities.ImageHolder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ArticleDoi")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("article_doi");
+
+                    b.Property<string>("Caption")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("caption");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("file_name");
+
+                    b.Property<byte[]>("ImageData")
+                        .IsRequired()
+                        .HasMaxLength(26214400)
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("image_data");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ArticleDoi");
+
+                    b.ToTable("Images");
+
+                    b.HasAnnotation("Relational:JsonPropertyName", "images");
+                });
+
+            modelBuilder.Entity("Entities.Organization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<byte[]>("LogoData")
+                        .IsRequired()
+                        .HasMaxLength(26214400)
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("logo_data");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("WebsiteUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)")
+                        .HasColumnName("website_url");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Organizations");
+                });
+
+            modelBuilder.Entity("Entities.Project", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<byte[]>("LogoData")
+                        .IsRequired()
+                        .HasMaxLength(26214400)
+                        .HasColumnType("varbinary(max)")
+                        .HasColumnName("logo_data");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("int")
+                        .HasColumnName("organization_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.ToTable("Projects");
                 });
 
             modelBuilder.Entity("Entities.ProteinData", b =>
@@ -137,18 +407,18 @@ namespace PeptideDataHomogenizer.Migrations
 
                     b.Property<bool>("Approved")
                         .HasColumnType("bit")
-                        .HasColumnName("approved");
-
-                    b.Property<string>("ApprovedById")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("approved_by");
+                        .HasColumnName("Approved");
 
                     b.Property<string>("ArticleDoi")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)")
-                        .HasColumnName("article_doi");
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("ArticleDoi");
+
+                    b.Property<string>("Binder")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("binder");
 
                     b.Property<string>("Classification")
                         .IsRequired()
@@ -156,15 +426,15 @@ namespace PeptideDataHomogenizer.Migrations
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("classification");
 
-                    b.Property<DateTime?>("DatetimeApproval")
-                        .HasColumnType("datetime2")
-                        .HasColumnName("datetime_approval");
-
                     b.Property<string>("ForceField")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("force_field");
+
+                    b.Property<double>("FreeBindingEnergy")
+                        .HasColumnType("float")
+                        .HasColumnName("free_binding_energy");
 
                     b.Property<double>("IonConcentration")
                         .HasColumnType("float")
@@ -176,20 +446,53 @@ namespace PeptideDataHomogenizer.Migrations
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("ions");
 
-                    b.Property<string>("SimulationMethod")
+                    b.Property<double>("KOff")
+                        .HasColumnType("float")
+                        .HasColumnName("KOff");
+
+                    b.Property<double>("KOn")
+                        .HasColumnType("float")
+                        .HasColumnName("KOn");
+
+                    b.Property<double>("Kd")
+                        .HasColumnType("float")
+                        .HasColumnName("Kd");
+
+                    b.Property<string>("Method")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("method");
+
+                    b.Property<string>("Organism")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("organism");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("ProjectId");
 
                     b.Property<string>("ProteinId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("protein_id");
 
+                    b.Property<string>("Residue")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("residue");
+
                     b.Property<double>("SimulationLength")
                         .HasColumnType("float")
                         .HasColumnName("simulation_length");
+
+                    b.Property<string>("SimulationMethod")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("simulation_method");
 
                     b.Property<string>("SoftwareName")
                         .IsRequired()
@@ -213,11 +516,21 @@ namespace PeptideDataHomogenizer.Migrations
                         .HasColumnType("nvarchar(255)")
                         .HasColumnName("water_model");
 
+                    b.Property<string>("WaterModelType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("water_model_type");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ArticleDoi");
 
+                    b.HasIndex("ProjectId");
+
                     b.ToTable("ProteinData");
+
+                    b.HasAnnotation("Relational:JsonPropertyName", "proteinData");
                 });
 
             modelBuilder.Entity("Entities.RegexData.ForceFieldSoftware", b =>
@@ -324,6 +637,64 @@ namespace PeptideDataHomogenizer.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("WaterModels");
+                });
+
+            modelBuilder.Entity("Entities.UsersPerOrganization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("OrganizationId")
+                        .HasColumnType("int")
+                        .HasColumnName("organization_id");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("role");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.ToTable("UsersPerOrganizations");
+                });
+
+            modelBuilder.Entity("Entities.UsersPerProject", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("role");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("UsersPerProjects");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -478,6 +849,20 @@ namespace PeptideDataHomogenizer.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("first_name");
+
+                    b.Property<bool>("HasRegistered")
+                        .HasColumnType("bit")
+                        .HasColumnName("has_registered");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("last_name");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
 
@@ -501,8 +886,22 @@ namespace PeptideDataHomogenizer.Migrations
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<long?>("RegistrationToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("bigint")
+                        .HasColumnName("registration_token");
+
+                    b.Property<DateTime?>("RegistrationTokenExpiration")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("registration_token_expiration");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("title");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
@@ -524,6 +923,25 @@ namespace PeptideDataHomogenizer.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Entities.ArticlePerProject", b =>
+                {
+                    b.HasOne("Entities.Article", "Article")
+                        .WithMany()
+                        .HasForeignKey("ArticleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Article");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("Entities.Chapter", b =>
                 {
                     b.HasOne("Entities.Article", "Article")
@@ -535,6 +953,57 @@ namespace PeptideDataHomogenizer.Migrations
                     b.Navigation("Article");
                 });
 
+            modelBuilder.Entity("Entities.DiscreditedJournal", b =>
+                {
+                    b.HasOne("Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Entities.DiscreditedPublisher", b =>
+                {
+                    b.HasOne("Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Entities.ExtractedTable", b =>
+                {
+                    b.HasOne("Entities.Article", null)
+                        .WithMany("Tables")
+                        .HasForeignKey("ArticleDoi")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Entities.ImageHolder", b =>
+                {
+                    b.HasOne("Entities.Article", null)
+                        .WithMany("Images")
+                        .HasForeignKey("ArticleDoi")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Entities.Project", b =>
+                {
+                    b.HasOne("Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+                });
+
             modelBuilder.Entity("Entities.ProteinData", b =>
                 {
                     b.HasOne("Entities.Article", "Article")
@@ -543,7 +1012,26 @@ namespace PeptideDataHomogenizer.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Article");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Entities.UsersPerOrganization", b =>
+                {
+                    b.HasOne("Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -601,7 +1089,11 @@ namespace PeptideDataHomogenizer.Migrations
                 {
                     b.Navigation("Chapters");
 
+                    b.Navigation("Images");
+
                     b.Navigation("ProteinData");
+
+                    b.Navigation("Tables");
                 });
 #pragma warning restore 612, 618
         }

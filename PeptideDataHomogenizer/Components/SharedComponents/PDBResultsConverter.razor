@@ -1,0 +1,366 @@
+﻿@using Entities
+@inject IJSRuntime JSRuntime
+
+<!-- Modal -->
+@if (showModal)
+{
+    <div class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Convert @ConversionTypeName</h3>
+                <button @onclick="CloseModal" class="btn-close">×</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="converter-container">
+                    <!-- Current Value Display -->
+                    <div class="input-section">
+                        <label>Current Value</label>
+                        <div class="current-value-display">@Value</div>
+                        <select class="unit-select" @bind="CurrentUnit">
+                            @foreach (var unit in GetAvailableUnits())
+                            {
+                                <option value="@unit">@unit</option>
+                            }
+                        </select>
+                    </div>
+
+                    <!-- Conversion Results -->
+                    <div class="results-section">
+                        <label>Convert To</label>
+                        <div class="results-grid">
+                            @foreach (var conversion in GetConversionOptions())
+                            {
+                                if (conversion.Unit != CurrentUnit)
+                                {
+                                    <div class="result-card" @onclick="() => SelectConversion(conversion.Value)">
+                                        <div class="result-value">@conversion.Value.ToString("G6")</div>
+                                        <div class="result-unit">@conversion.Unit</div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int ProteinId { get; set; }
+    [Parameter] public int ConversionType { get; set; }
+    [Parameter] public double Value { get; set; }
+    [Parameter] public EventCallback<(int, int, double)> OnConversionConfirmed { get; set; }
+
+    private bool showModal = false;
+    private string CurrentUnit { get; set; }
+
+    private string ConversionTypeName => ConversionTypes[ConversionType];
+    private List<string> ConversionTypes = new() { "Kd", "KOff", "KOn", "Free Binding Energy" };
+
+    protected override void OnInitialized()
+    {
+        CurrentUnit = GetDefaultUnit();
+    }
+
+    private string GetDefaultUnit()
+    {
+        return ConversionType switch
+        {
+            0 => "µM",    // Kd
+            1 => "s⁻¹",   // Koff
+            2 => "M⁻¹s⁻¹",// Kon
+            3 => "kcal/mol", // ΔG
+            _ => ""
+        };
+    }
+
+    private List<string> GetAvailableUnits()
+    {
+        return ConversionType switch
+        {
+            0 => new List<string> { "M", "mM", "µM", "nM", "pM" }, // Kd
+            1 => new List<string> { "s⁻¹", "ms⁻¹", "µs⁻¹", "ns⁻¹" }, // Koff
+            2 => new List<string> { "M⁻¹s⁻¹", "M⁻¹ms⁻¹", "M⁻¹µs⁻¹", "M⁻¹ns⁻¹" }, // Kon
+            3 => new List<string> { "kcal/mol", "kJ/mol" }, // ΔG
+            _ => new List<string>()
+        };
+    }
+
+    private List<(string Unit, double Value)> GetConversionOptions()
+    {
+        var options = new List<(string, double)>();
+        double baseValue = ConvertToBaseUnit(Value, CurrentUnit);
+
+        foreach (var unit in GetAvailableUnits())
+        {
+            double convertedValue = ConvertFromBaseUnit(baseValue, unit);
+            options.Add((unit, convertedValue));
+        }
+
+        return options;
+    }
+
+    private double ConvertToBaseUnit(double value, string unit)
+    {
+        if (ConversionType == 0) // Kd
+        {
+            return unit switch
+            {
+                "M" => value,
+                "mM" => value * 1e-3,
+                "µM" => value * 1e-6,
+                "nM" => value * 1e-9,
+                "pM" => value * 1e-12,
+                _ => value
+            };
+        }
+        else if (ConversionType == 1) // Koff
+        {
+            return unit switch
+            {
+                "s⁻¹" => value,
+                "ms⁻¹" => value * 1e3,
+                "µs⁻¹" => value * 1e6,
+                "ns⁻¹" => value * 1e9,
+                _ => value
+            };
+        }
+        else if (ConversionType == 2) // Kon
+        {
+            return unit switch
+            {
+                "M⁻¹s⁻¹" => value,
+                "M⁻¹ms⁻¹" => value * 1e-3,
+                "M⁻¹µs⁻¹" => value * 1e-6,
+                "M⁻¹ns⁻¹" => value * 1e-9,
+                _ => value
+            };
+        }
+        else if (ConversionType == 3) // ΔG
+        {
+            return unit switch
+            {
+                "kcal/mol" => value,
+                "kJ/mol" => value / 4.184,
+                _ => value
+            };
+        }
+
+        return value;
+    }
+
+    private double ConvertFromBaseUnit(double baseValue, string targetUnit)
+    {
+        if (ConversionType == 0) // Kd
+        {
+            return targetUnit switch
+            {
+                "M" => baseValue,
+                "mM" => baseValue / 1e-3,
+                "µM" => baseValue / 1e-6,
+                "nM" => baseValue / 1e-9,
+                "pM" => baseValue / 1e-12,
+                _ => baseValue
+            };
+        }
+        else if (ConversionType == 1) // Koff
+        {
+            return targetUnit switch
+            {
+                "s⁻¹" => baseValue,
+                "ms⁻¹" => baseValue / 1e3,
+                "µs⁻¹" => baseValue / 1e6,
+                "ns⁻¹" => baseValue / 1e9,
+                _ => baseValue
+            };
+        }
+        else if (ConversionType == 2) // Kon
+        {
+            return targetUnit switch
+            {
+                "M⁻¹s⁻¹" => baseValue,
+                "M⁻¹ms⁻¹" => baseValue / 1e-3,
+                "M⁻¹µs⁻¹" => baseValue / 1e-6,
+                "M⁻¹ns⁻¹" => baseValue / 1e-9,
+                _ => baseValue
+            };
+        }
+        else if (ConversionType == 3) // ΔG
+        {
+            return targetUnit switch
+            {
+                "kcal/mol" => baseValue,
+                "kJ/mol" => baseValue * 4.184,
+                _ => baseValue
+            };
+        }
+
+        return baseValue;
+    }
+
+    private async Task SelectConversion(double newValue)
+    {
+        await OnConversionConfirmed.InvokeAsync((ProteinId, ConversionType, newValue));
+        CloseModal();
+    }
+
+    public void ShowModal()
+    {
+        showModal = true;
+    }
+
+    public void CloseModal()
+    {
+        showModal = false;
+    }
+}
+
+<style>
+    /* Base Modal Styles (from template) */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        width: 80%;
+        max-width: 500px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        overflow: hidden;
+    }
+
+    .modal-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fafafa;
+    }
+
+        .modal-header h3 {
+            margin: 0;
+            font-weight: 500;
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+    .btn-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #888;
+        padding: 0 0.5rem;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+    }
+
+    /* Converter Specific Styles */
+    .converter-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .input-section, .results-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    label {
+        font-size: 0.85rem;
+        color: #666;
+        font-weight: 500;
+    }
+
+    .current-value-display {
+        font-size: 1.8rem;
+        font-weight: 300;
+        letter-spacing: -0.5px;
+        color: #000;
+    }
+
+    .unit-select {
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        font-size: 0.9rem;
+        background: white;
+        -webkit-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.5rem center;
+        background-size: 1rem;
+        padding-right: 1.75rem;
+    }
+
+    .results-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .result-card {
+        border: 1px solid #eaeaea;
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: white;
+    }
+
+        .result-card:hover {
+            border-color: #007AFF;
+            background: #f8faff;
+            transform: translateY(-2px);
+        }
+
+    .result-value {
+        font-size: 1.2rem;
+        font-weight: 400;
+        color: #007AFF;
+        margin-bottom: 0.25rem;
+    }
+
+    .result-unit {
+        font-size: 0.75rem;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Responsive Adjustments */
+    @@media (max-width: 600px) {
+        .modal-content {
+            width: 90%;
+        }
+
+        .results-grid {
+            grid-template-columns: repeat(2, 1fr));
+        }
+    }
+</style>

@@ -19,16 +19,22 @@ namespace Entities
             SoftwareName = proteinData.SoftwareName;
             SoftwareVersion = proteinData.SoftwareVersion;
             WaterModel = proteinData.WaterModel;
+            WaterModelType = proteinData.WaterModelType;
             ForceField = proteinData.ForceField;
             SimulationMethod = proteinData.SimulationMethod;
             Temperature = proteinData.Temperature;
             Ions = proteinData.Ions;
             IonConcentration = proteinData.IonConcentration;
             SimulationLength = proteinData.SimulationLength;
+            Kd = proteinData.Kd;
+            KOff = proteinData.KOff;
+            KOn = proteinData.KOn;
+            FreeBindingEnergy = proteinData.FreeBindingEnergy;
+            Residue = proteinData.Residue;
+            Binder = proteinData.Binder;
+            ProjectId = proteinData.ProjectId;
             ArticleDoi = proteinData.ArticleDoi;
             Approved = proteinData.Approved;
-            DatetimeApproval = proteinData.DatetimeApproval;
-            ApprovedById = proteinData.ApprovedById;
         }
 
         [Key]
@@ -52,6 +58,14 @@ namespace Entities
         [MaxLength(255)]
         public string Method { get; set; } = string.Empty;
 
+        [Column("residue")]
+        [MaxLength(255)]
+        public string? Residue { get; set; } = string.Empty;
+
+        [Column("binder")]
+        [MaxLength(255)]
+        public string Binder { get; set; } = string.Empty;
+
         [Column("software_name")]
         [MaxLength(255)]
         public string SoftwareName { get; set; } = string.Empty;
@@ -63,6 +77,10 @@ namespace Entities
         [Column("water_model")]
         [MaxLength(255)]
         public string WaterModel { get; set; } = string.Empty;
+
+        [Column("water_model_type")]
+        [MaxLength(50)]
+        public string WaterModelType { get; set; } = string.Empty;
 
         [Column("force_field")]
         [MaxLength(255)]
@@ -85,23 +103,60 @@ namespace Entities
         [Column("simulation_length")]
         public double SimulationLength { get; set; } = 0.0;
 
-        [Required]
-        [Column("article_doi")]
-        public string ArticleDoi { get; set; }
+        [Column("Kd")]
+        public double Kd { get; set; } = 0.0;
 
+        [Column("KOff")]
+        public double KOff { get; set; } = 0.0;
+
+        [Column("KOn")]
+        public double KOn { get; set; } = 0.0;
+
+        [Column("free_binding_energy")]
+        public double FreeBindingEnergy { get; set; } = 0.0;
+
+        [Required]
+        [ForeignKey("ProjectId")]
+        public Project Project { get; set; }
+        [Column("ProjectId")]
+        public int ProjectId { get; set; }
+
+        [Required]
         [ForeignKey("ArticleDoi")]
-        [JsonIgnore]
-        public Article Article { get; set; }
+        public Article Article { get; set; } = new Article();
+        [Column("ArticleDoi")]
+        public string ArticleDoi { get; set; } = string.Empty;
 
-        [Required]
-        [Column("approved")]
+        [Column("Approved")]
         public bool Approved { get; set; } = false;
 
-        [Column("datetime_approval")]
-        public DateTime? DatetimeApproval { get; set; }
 
-        [Column("approved_by")]
-        [MaxLength(255)]
-        public string ApprovedById { get; set; } = string.Empty;
+        public bool AreEquals(ProteinData other)
+        {
+            if (other == null) return false;
+            return ProteinId == other.ProteinId &&
+                   Classification == other.Classification &&
+                   Organism == other.Organism &&
+                   Method == other.Method &&
+                   Residue == other.Residue &&
+                     Binder == other.Binder &&
+                   SoftwareName == other.SoftwareName &&
+                   SoftwareVersion == other.SoftwareVersion &&
+                   WaterModel == other.WaterModel &&
+                   WaterModelType == other.WaterModelType &&
+                   ForceField == other.ForceField &&
+                   SimulationMethod == other.SimulationMethod &&
+                   Temperature.Equals(other.Temperature) &&
+                   Ions == other.Ions &&
+                   IonConcentration.Equals(other.IonConcentration) &&
+                   SimulationLength.Equals(other.SimulationLength) &&
+                   Kd.Equals(other.Kd) &&
+                   KOff.Equals(other.KOff) &&
+                   KOn.Equals(other.KOn) &&
+                   FreeBindingEnergy.Equals(other.FreeBindingEnergy) &&
+                   ArticleDoi == other.ArticleDoi &&
+                   Approved == other.Approved;
+        }
+
     }
 }

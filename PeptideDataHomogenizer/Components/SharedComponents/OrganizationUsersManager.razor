@@ -1,0 +1,541 @@
+﻿@using Entities
+@using Microsoft.AspNetCore.Identity
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@inject UserOrganizationService UserOrganizationService
+@inject DatabaseDataHandler DataHandler
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+
+
+@rendermode InteractiveServer
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title mb-3">Manage Organization Users</h5>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6>Users in @CurrentOrganization.Name</h6>
+            @if (UserRole == "admin")
+            {
+                <button @onclick="ShowCreateUserModal"
+                        class="btn btn-sm btn-primary">
+                    <i class="bi bi-person-plus"></i> Add New User to Organization
+                </button>
+            }
+        </div>
+
+        <!-- Current Organization Users -->
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6>Current Organization: @CurrentOrganization.Name</h6>
+                <div class="input-group" style="width: 300px;">
+                    <input type="text" @bind="UserSearchTerm" @bind:event="oninput"
+                           class="form-control" placeholder="Search users..." />
+                    <span class="input-group-text">
+                        <i class="bi bi-search"></i>
+                    </span>
+                </div>
+            </div>
+
+            @if (IsLoadingCurrentUsers)
+            {
+                <div class="text-center my-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else if (CurrentOrganizationUsers.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>User</th>
+                                <th>Role</th>
+                                @if (UserRole == "admin")
+                                {
+                                    <th>Actions</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in FilteredCurrentUsers)
+                            {
+                                var userState = GetUserState(user.User.Id, true);
+                                <tr>
+                                    <td>@(string.IsNullOrWhiteSpace(user.User.ExtendedFullName) ? user.User.Email : user.User.ExtendedFullName)</td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            @if (UserRole == "admin")
+                                            {
+                                                <select class="form-select form-select-sm"
+                                                        @bind="userState.Role"
+                                                        @bind:event="onchange"
+                                                        @bind:after="async () => await UpdateUserRole(userState)">
+                                                    <option value="visitor">Visitor</option>
+                                                    <option value="editor">Editor</option>
+                                                    <option value="admin">Admin</option>
+                                                </select>
+                                                @if (userState.IsUpdating)
+                                                {
+                                                    <div class="ms-2 spinner-border spinner-border-sm text-primary" role="status">
+                                                        <span class="visually-hidden">Updating...</span>
+                                                    </div>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary text-capitalize">@userState.Role</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    @if (UserRole == "admin")
+                                    {
+                                        <td>
+                                            <button @onclick="() => RemoveUser(userState)"
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    disabled="@userState.IsRemoving">
+                                                @if (userState.IsRemoving)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-person-dash"></i>
+                                                }
+                                                Remove
+                                            </button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info">No users found in this organization.</div>
+            }
+        </div>
+
+        <!-- Other Organizations Selection -->
+        @if (UserRole == "admin")
+        {
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6>Add Users From Other Organizations</h6>
+                    <div class="input-group" style="width: 300px;">
+                        <input type="text" @bind="OrganizationSearchTerm" @bind:event="oninput"
+                               class="form-control" placeholder="Search organizations..." />
+                        <span class="input-group-text">
+                            <i class="bi bi-search"></i>
+                        </span>
+                    </div>
+                </div>
+
+                @if (FilteredOtherOrganizations.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Logo</th>
+                                    <th>Name</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var org in FilteredOtherOrganizations.Take(5))
+                                {
+                                    <tr @onclick="() => SelectOtherOrganization(org)"
+                                        style="cursor: pointer;"
+                                        class="@(SelectedOtherOrganization?.Id == org.Id ? "table-primary" : "")">
+                                        <td>
+                                            @if (org.LogoData != null && org.LogoData.Length > 0)
+                                            {
+                                                <img src="data:@org.ContentType;base64,@(Convert.ToBase64String(org.LogoData))" class="rounded-circle border"
+                                                     style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;" />
+                                            }
+                                            else
+                                            {
+                                                <div class="rounded-circle border bg-light d-flex justify-content-center align-items-center"
+                                                     style="width: 40px; height: 40px;">
+                                                    <i class="bi bi-building text-secondary"></i>
+                                                </div>
+                                            }
+                                        </td>
+                                        <td>@org.Name</td>
+                                        <td>
+                                            <button @onclick="() => SelectOtherOrganization(org)"
+                                                    class="btn btn-sm btn-outline-primary">
+                                                Select
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(OrganizationSearchTerm))
+                {
+                    <div class="alert alert-info">No organizations found matching your search.</div>
+                }
+            </div>
+        }
+
+        <!-- Other Organization Users -->
+        @if (UserRole == "admin" && SelectedOtherOrganization != null)
+        {
+            <div class="mb-3">
+                @if (IsLoadingOtherUsers)
+                {
+                    <div class="text-center my-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                }
+                else if (OtherOrganizationUsers.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>User</th>
+                                    <th>Status</th>
+                                    <th>Role</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in FilteredOtherUsers)
+                                {
+                                    var userState = GetUserState(user.User.Id, false);
+                                    <tr>
+                                        <td>@user.User.ExtendedFullName</td>
+                                        <td>
+                                            <span class="badge @(userState.IsInCurrentOrganization ? "bg-success" : "bg-secondary")">
+                                                @(userState.IsInCurrentOrganization ? "Already Member" : "Not Member")
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <select class="form-select form-select-sm"
+                                                    @bind="userState.NewRole">
+                                                <option value="">Select role...</option>
+                                                <option value="visitor">Visitor</option>
+                                                <option value="editor">Editor</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <button @onclick="() => AddUser(userState)"
+                                                    class="btn btn-sm btn-outline-primary"
+                                                    disabled="@(string.IsNullOrEmpty(userState.NewRole) || userState.IsAdding || userState.IsInCurrentOrganization)">
+                                                @if (userState.IsAdding)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-person-plus"></i>
+                                                }
+                                                Add
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-info">No users found in this organization.</div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@if (UserRole == "admin")
+{
+    <CreateUserToOrganization @ref="createUserModal" OrganizationId="@CurrentOrganization.Id" LoadOrganizationUsers="LoadCurrentOrganizationUsers" />
+}
+
+@code {
+    [Parameter]
+    public Organization CurrentOrganization { get; set; }
+
+    [Parameter]
+    public string UserRole { get; set; } = "visitor";
+
+    private List<Organization> OtherOrganizations = new();
+    private List<OrganizationUser> CurrentOrganizationUsers = new();
+    private List<OrganizationUser> OtherOrganizationUsers = new();
+    private Organization? SelectedOtherOrganization;
+    private string OrganizationSearchTerm = string.Empty;
+    private string UserSearchTerm = string.Empty;
+    private bool IsLoadingCurrentUsers = false;
+    private bool IsLoadingOtherUsers = false;
+    private CreateUserToOrganization? createUserModal;
+
+    private class UserState
+    {
+        public string UserId { get; set; }
+        public string Role { get; set; }
+        public string NewRole { get; set; } = "visitor";
+        public bool IsInCurrentOrganization { get; set; }
+        public bool IsUpdating { get; set; }
+        public bool IsAdding { get; set; }
+        public bool IsRemoving { get; set; }
+    }
+
+    private Dictionary<string, UserState> UserStates = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity.IsAuthenticated)
+        {
+            var roles = await UserManager.GetRolesAsync(await UserManager.GetUserAsync(user));
+            //print rolesfor debugging
+            Console.WriteLine($"User roles: {string.Join(", ", roles)}");
+            UserRole = (roles.Contains("Admin") || roles.Contains("SuperAdmin")) ? "admin" : UserRole;
+        }
+        await LoadCurrentOrganizationUsers();
+        await LoadOtherOrganizations();
+    }
+
+    private IEnumerable<OrganizationUser> FilteredCurrentUsers => CurrentOrganizationUsers
+        .Where(u => string.IsNullOrEmpty(UserSearchTerm) ||
+                    u.User.ExtendedFullName.Contains(UserSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(u => u.User.ExtendedFullName);
+
+    private IEnumerable<Organization> FilteredOtherOrganizations => OtherOrganizations
+        .Where(o => string.IsNullOrEmpty(OrganizationSearchTerm) ||
+                    o.Name.Contains(OrganizationSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(o => o.Name);
+
+    private IEnumerable<OrganizationUser> FilteredOtherUsers => OtherOrganizationUsers
+        .Where(u => string.IsNullOrEmpty(UserSearchTerm) ||
+                    u.User.ExtendedFullName.Contains(UserSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(u => u.User.ExtendedFullName);
+
+    private UserState GetUserState(string userId, bool isCurrentOrganization)
+    {
+        if (!UserStates.TryGetValue(userId, out var state))
+        {
+            var orgUser = isCurrentOrganization
+                ? CurrentOrganizationUsers.FirstOrDefault(ou => ou.User.Id == userId)
+                : OtherOrganizationUsers.FirstOrDefault(ou => ou.User.Id == userId);
+
+            var isInCurrentOrg = CurrentOrganizationUsers.Any(ou => ou.User.Id == userId);
+
+            state = new UserState
+            {
+                UserId = userId,
+                Role = orgUser?.Role ?? "visitor",
+                NewRole = "visitor",
+                IsInCurrentOrganization = isInCurrentOrg
+            };
+            UserStates[userId] = state;
+        }
+        return state;
+    }
+
+    private async Task LoadOtherOrganizations()
+    {
+        OtherOrganizations = (await DataHandler.GetAllAsync<Organization>())
+            .Where(o => o.Id != CurrentOrganization.Id)
+            .ToList();
+        StateHasChanged();
+    }
+
+    private async Task LoadCurrentOrganizationUsers()
+    {
+        IsLoadingCurrentUsers = true;
+        StateHasChanged();
+
+        try
+        {
+            CurrentOrganizationUsers.Clear();
+            var users = await UserOrganizationService.GetUsersByOrganizationIdAsync(CurrentOrganization.Id);
+            foreach (var user in users)
+            {
+                var role = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(CurrentOrganization.Id, user.Id);
+                CurrentOrganizationUsers.Add(new OrganizationUser
+                {
+                    User = user,
+                    Role = role ?? "visitor"
+                });
+            }
+        }
+        finally
+        {
+            IsLoadingCurrentUsers = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SelectOtherOrganization(Organization org)
+    {
+        if (UserRole != "admin")
+            return;
+
+        SelectedOtherOrganization = org;
+        IsLoadingOtherUsers = true;
+        StateHasChanged();
+
+        try
+        {
+            OtherOrganizationUsers.Clear();
+            var users = await UserOrganizationService.GetUsersByOrganizationIdAsync(org.Id);
+            foreach (var user in users)
+            {
+                var role = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(org.Id, user.Id);
+                OtherOrganizationUsers.Add(new OrganizationUser
+                {
+                    User = user,
+                    Role = role ?? "visitor"
+                });
+            }
+        }
+        finally
+        {
+            IsLoadingOtherUsers = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AddUser(UserState state)
+    {
+        if (UserRole != "admin" || string.IsNullOrEmpty(state.NewRole)) return;
+
+        state.IsAdding = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserOrganizationService.AddUserToOrganizationAsync(state.UserId, CurrentOrganization.Id, state.NewRole);
+
+            // Update local state
+            state.IsInCurrentOrganization = true;
+            state.Role = state.NewRole;
+
+            // Add to current organization users if not already there
+            if (!CurrentOrganizationUsers.Any(u => u.User.Id == state.UserId))
+            {
+                var user = OtherOrganizationUsers.FirstOrDefault(u => u.User.Id == state.UserId)?.User;
+                if (user != null)
+                {
+                    CurrentOrganizationUsers.Add(new OrganizationUser
+                    {
+                        User = user,
+                        Role = state.NewRole
+                    });
+                }
+            }
+
+            await LoadCurrentOrganizationUsers();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to add user: {ex.Message}");
+        }
+        finally
+        {
+            state.IsAdding = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveUser(UserState state)
+    {
+        if (UserRole != "admin")
+            return;
+
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to remove this user from your organization?"))
+        {
+            return;
+        }
+
+        state.IsRemoving = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserOrganizationService.RemoveUserFromOrganizationAsync(state.UserId, CurrentOrganization.Id);
+
+            // Update local state
+            state.IsInCurrentOrganization = false;
+
+            // Remove from current organization users
+            CurrentOrganizationUsers.RemoveAll(u => u.User.Id == state.UserId);
+
+            await LoadCurrentOrganizationUsers();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to remove user: {ex.Message}");
+        }
+        finally
+        {
+            state.IsRemoving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateUserRole(UserState state)
+    {
+        if (UserRole != "admin" || string.IsNullOrEmpty(state.Role)) return;
+
+        state.IsUpdating = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserOrganizationService.UpdateRoleByUserIdAndOrganizationIdAsync(
+                state.UserId,
+                CurrentOrganization.Id,
+                state.Role);
+
+            // Update local state
+            var orgUser = CurrentOrganizationUsers.FirstOrDefault(ou => ou.User.Id == state.UserId);
+            if (orgUser != null)
+            {
+                orgUser.Role = state.Role;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Failed to update role: {ex.Message}");
+            // Revert the change
+            var originalRole = CurrentOrganizationUsers.FirstOrDefault(ou => ou.User.Id == state.UserId)?.Role ?? "visitor";
+            state.Role = originalRole;
+        }
+        finally
+        {
+            state.IsUpdating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowCreateUserModal()
+    {
+        if (UserRole == "admin")
+        {
+            createUserModal?.Show();
+        }
+    }
+
+    private class OrganizationUser
+    {
+        public ApplicationUser User { get; set; }
+        public string Role { get; set; }
+    }
+}

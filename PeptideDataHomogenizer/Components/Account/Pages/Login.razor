@@ -6,68 +6,108 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
 
 @inject SignInManager<ApplicationUser> SignInManager
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
+@inject UserOrganizationService UserOrganizationService
+@inject IJSRuntime JSRuntime
 
-<PageTitle>Log in</PageTitle>
+<PageTitle>Log in - Peptide Data Homogenizer</PageTitle>
 
-<h1>Log in</h1>
-<div class="row">
-    <div class="col-lg-6">
-        <section>
-            <StatusMessage Message="@errorMessage" />
-            <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
-                <DataAnnotationsValidator />
-                <h2>Use a local account to log in.</h2>
-                <hr />
-                <ValidationSummary class="text-danger" role="alert" />
-                <div class="form-floating mb-3">
-                    <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                    <label for="Input.Email" class="form-label">Email</label>
-                    <ValidationMessage For="() => Input.Email" class="text-danger" />
+<div class="min-vh-80 d-flex align-items-center py-5">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-12 col-lg-12 col-xl-12">
+                <div class="text-center mb-5">
+                    <div class="d-inline-block bg-primary rounded-circle p-3 mb-3 shadow">
+                        <i class="bi bi-lock text-white fs-1"></i>
+                    </div>
+                    <h1 class="display-5 fw-bold text-primary mb-2">Peptide Data Homogenizer</h1>
+                    <p class="text-muted">Secure access to your peptide research platform</p>
                 </div>
-                <div class="form-floating mb-3">
-                    <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
-                    <label for="Input.Password" class="form-label">Password</label>
-                    <ValidationMessage For="() => Input.Password" class="text-danger" />
+
+                <div class="card shadow-lg border-0 rounded-3 overflow-hidden">
+                    <div class="card-body p-4 p-md-5">
+                        <div class="text-center mb-4">
+                            <h2 class="h4 fw-bold">Sign in to your account</h2>
+                            <p class="text-muted">Enter your credentials to continue</p>
+                        </div>
+
+                        <StatusMessage Message="@errorMessage" />
+                        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary class="alert alert-danger" role="alert" />
+
+                            <div class="mb-3">
+                                <label for="Input.Email" class="form-label">Email address</label>
+                                <InputText @bind-Value="Input.Email" id="Input.Email"
+                                           class="form-control form-control-lg"
+                                           autocomplete="username"
+                                           aria-required="true"
+                                           placeholder="name@example.com" />
+                                <ValidationMessage For="() => Input.Email" class="text-danger small mt-1" />
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <label for="Input.Password" class="form-label">Password</label>
+                                    <a href="Account/ForgotPassword" class="small text-decoration-none">Forgot password?</a>
+                                </div>
+                                <InputText type="password" @bind-Value="Input.Password" id="Input.Password"
+                                           class="form-control form-control-lg"
+                                           autocomplete="current-password"
+                                           aria-required="true"
+                                           placeholder="••••••••" />
+                                <ValidationMessage For="() => Input.Password" class="text-danger small mt-1" />
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <InputCheckbox @bind-Value="Input.RememberMe" id="rememberMe" class="form-check-input" />
+                                <label class="form-check-label" for="rememberMe">Remember me</label>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg w-100 mb-3">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Sign in
+                            </button>
+
+                            <div class="text-center mt-4 pt-2 border-top">
+                                <p class="small mb-0">
+                                    Don't have an account?
+                                    <a href="@(NavigationManager.GetUriWithQueryParameters("Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))"
+                                       class="text-decoration-none fw-semibold">
+                                        Register now
+                                    </a>
+                                </p>
+                                @* <p class="small">
+                                    <a href="Account/ResendEmailConfirmation" class="text-decoration-none">Resend email confirmation</a>
+                                </p> *@
+                            </div>
+                        </EditForm>
+                    </div>
                 </div>
-                <div class="checkbox mb-3">
-                    <label class="form-label">
-                        <InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
-                        Remember me
-                    </label>
+            </div>
+
+            @* <div class="col-md-8 col-lg-5 col-xl-4 mt-5 mt-lg-0">
+                <div class="card shadow-sm border-0 rounded-3">
+                    <div class="card-body p-4 p-md-5">
+                        <h3 class="h5 fw-bold mb-3">Alternative login</h3>
+                        <p class="text-muted small mb-4">Use external services to authenticate</p>
+                        <ExternalLoginPicker />
+                    </div>
                 </div>
-                <div>
-                    <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-                </div>
-                <div>
-                    <p>
-                        <a href="Account/ForgotPassword">Forgot your password?</a>
-                    </p>
-                    <p>
-                        <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Register as a new user</a>
-                    </p>
-                    <p>
-                        <a href="Account/ResendEmailConfirmation">Resend email confirmation</a>
-                    </p>
-                </div>
-            </EditForm>
-        </section>
-    </div>
-    <div class="col-lg-4 col-lg-offset-2">
-        <section>
-            <h3>Use another service to log in.</h3>
-            <hr />
-            <ExternalLoginPicker />
-        </section>
+            </div> *@
+        </div>
     </div>
 </div>
 
 @code {
     private string? errorMessage;
+
+    [Inject] private UserManager<ApplicationUser> UserManager { get; set; } = default!;
 
     [CascadingParameter]
     private HttpContext HttpContext { get; set; } = default!;
@@ -89,19 +129,44 @@
 
     public async Task LoginUser()
     {
-        // This doesn't count login failures towards account lockout
-        // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        Logger.LogInformation($"Attempting login for {Input.Email}");
+
+        // Verify user exists first
+        var user = await UserManager.FindByEmailAsync(Input.Email);
+        if (user == null)
+        {
+            Logger.LogWarning($"User {Input.Email} not found");
+            errorMessage = "Invalid login attempt.";
+            return;
+        }
+
+        Logger.LogInformation($"User found: {user.Id}, SecurityStamp: {user.SecurityStamp}");
+        Logger.LogInformation($"Current PasswordHash: {user.PasswordHash}");
+
+        // Verify password manually
+        var passwordValid = await UserManager.CheckPasswordAsync(user, Input.Password);
+        Logger.LogInformation($"Manual password check result: {passwordValid}");
+
+        // Attempt login
+        var result = await SignInManager.PasswordSignInAsync(
+            user.UserName,
+            Input.Password,
+            Input.RememberMe,
+            lockoutOnFailure: false);
+
+        Logger.LogInformation($"SignIn result: {result.Succeeded}");
+        Logger.LogInformation($"SignIn failure: {result.IsNotAllowed}");
+        Logger.LogInformation($"SignIn locked out: {result.IsLockedOut}");
+        Logger.LogInformation($"SignIn 2FA required: {result.RequiresTwoFactor}");
+
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
-            RedirectManager.RedirectTo(ReturnUrl);
+            RedirectManager.RedirectTo(ReturnUrl ?? "/");
         }
         else if (result.RequiresTwoFactor)
         {
-            RedirectManager.RedirectTo(
-                "Account/LoginWith2fa",
-                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+            RedirectManager.RedirectTo($"Account/LoginWith2fa?ReturnUrl={ReturnUrl}");
         }
         else if (result.IsLockedOut)
         {
@@ -110,7 +175,7 @@
         }
         else
         {
-            errorMessage = "Error: Invalid login attempt.";
+            errorMessage = "Invalid login attempt. Please check your credentials.";
         }
     }
 

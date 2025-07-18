@@ -1,0 +1,57 @@
+﻿@using SuperSimpleBlazorModal
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+@if (!string.IsNullOrEmpty(pdbId))
+{
+    <SimpleModal Id="molstar-modal"
+                 OpenOnFirstRender="true"
+                 ExtraCssClass="simple-modal">
+
+        <div class="modal-header">
+            <h5 class="modal-title">PDB Viewer</h5>
+            <button type="button" class="btn-close" @onclick="CloseMolStarViewer"><i class="bi bi-x-lg"></i></button>
+        </div>
+
+        <div class="modal-body p-0">
+            <p class="px-3 pt-2 mb-0">Viewing PDB ID: <strong>@pdbId</strong></p>
+            <iframe src="https://molstar.org/me/viewer/?pdb=@pdbId"
+                    title="Mesoscale Explorer"
+                    style="width:100%;height:calc(100% - 40px);border:none;">
+            </iframe>
+        </div>
+    </SimpleModal>
+}
+
+@code {
+    [Parameter]
+    public string pdbId { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private async Task CloseMolStarViewer()
+    {
+        if (OnClose.HasDelegate)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+}
+
+<style>
+    .simple-modal {
+        width: 90vw;
+        height: 90vh;
+        max-width: none;
+    }
+
+        .simple-modal .modal-content {
+            height: 100%;
+        }
+
+        .simple-modal .modal-body {
+            height: calc(100% - 60px);
+            padding: 0;
+        }
+</style>

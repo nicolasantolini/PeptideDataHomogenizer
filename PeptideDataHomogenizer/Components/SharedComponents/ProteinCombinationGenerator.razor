@@ -1,0 +1,356 @@
+﻿@using Entities
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="mt-3">
+    <button class="btn btn-outline-secondary d-flex align-items-center"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#combinationGenerator"
+            aria-expanded="false"
+            aria-controls="combinationGenerator">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-grid-3x3-gap me-2" viewBox="0 0 16 16">
+            <path d="M4 2v2H2V2h2zm1 12v-2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V7a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm5 10v-2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V7a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0-5V2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zM14 4V2a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0 5V7a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm0 5v-2a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z" />
+        </svg>
+        Protein Data Combination Generator
+    </button>
+
+    <div class="collapse mt-3" id="combinationGenerator">
+        <div class="card card-body bg-light">
+            <div class="d-flex flex-column">
+                <h6 class="mb-3 text-primary">Generate combinations with a new value</h6>
+
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label mb-1">Select Category:</label>
+                        <select class="form-select" @bind="combinationCategory">
+                            <option value="0">Protein ID</option>
+                            <option value="1">Residue</option>
+                            <option value="2">Binder</option>
+                            <option value="3">Software Name</option>
+                            <option value="4">Software Version</option>
+                            <option value="5">Water Model</option>
+                            <option value="6">Water Model Type</option>
+                            <option value="7">Force Field</option>
+                            <option value="8">Simulation Method</option>
+                            <option value="9">Temperature (K)</option>
+                            <option value="10">Ions</option>
+                            <option value="11">Ion Concentration (M)</option>
+                            <option value="12">Simulation Length (ns)</option>
+                            <option value="13">Kd</option>
+                            <option value="14">KOff</option>
+                            <option value="15">KOn</option>
+                            <option value="16">Free Binding Energy</option>
+                            "ProteinId",       // 0
+                            "Residue",      // 1
+                            "Binder",        // 2
+                            "SoftwareName",     // 3
+                            "SoftwareVersion",  // 4
+                            "WaterModel",       // 5
+                            "WaterModelType", // 6
+                            "ForceField",       // 7
+                            "SimulationMethod", // 8
+                            "Temperature",      // 9
+                            "Ions",             // 10
+                            "IonConcentration", // 11
+                            "SimulationLength", // 12
+                            "Kd",               // 13
+                            "KOff",             // 14
+                            "KOn",              // 15
+                            "FreeBindingEnergy", // 16
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label mb-1">New Value:</label>
+                        @if (IsNumericCategory(combinationCategory))
+                        {
+                            <input type="number" step="0.01" class="form-control" @bind="combinationValueNumeric" />
+                        }
+                        else
+                        {
+                            <input type="text" class="form-control" @bind="combinationValueText" />
+                        }
+                    </div>
+
+                    <div class="col-md-4 d-flex align-items-center">
+                        <button class="btn btn-primary" @onclick="GenerateCombinations">
+                            <span class="d-flex align-items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-braces-asterisk me-2" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M1.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C2.25 2 1.49 2.759 1.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6ZM14.886 7.9v.164c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456v-1.3c-1.114 0-1.49-.362-1.49-1.456V4.352C14.51 2.759 13.75 2 12.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6ZM7.5 11.5V9.207l-1.621 1.621-.707-.707L6.792 8.5H4.5v-1h2.293L5.172 5.879l.707-.707L7.5 6.792V4.5h1v2.293l1.621-1.621.707.707L9.208 7.5H11.5v1H9.207l1.621 1.621-.707.707L8.5 9.208V11.5h-1Z" />
+                                </svg>
+                                Generate Combinations
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                @if (showCombinationResult)
+                {
+                    <div class="mt-3 p-2 border rounded bg-light">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><strong>@combinationCount</strong> new combinations generated</span>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => showCombinationResult = false">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Article Article { get; set; }
+
+    [Parameter]
+    public EventCallback<Article> ArticleChanged { get; set; } // Add this
+
+    // Combination generator properties
+    private int combinationCategory = 0;
+    private string combinationValueText = "";
+    private double combinationValueNumeric = 0;
+    private bool showCombinationResult = false;
+    private int combinationCount = 0;
+
+    private bool IsNumericCategory(int category)
+    {
+        return category == 9 || category == 11 || category == 12 || category == 13 || category == 14 || category == 15 || category == 16; // Temperature, IonConc, SimLength
+    }
+
+    private async Task GenerateCombinations()
+    {
+        if (Article?.ProteinData == null || !Article.ProteinData.Any())
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "No protein data available to create combinations from.");
+            return;
+        }
+
+        // Get all distinct values for each property
+        var distinctValues = new Dictionary<string, List<object>>();
+
+        // Fixed properties (grouping keys) - except when adding new Protein ID
+        var fixedProps = combinationCategory != 0
+        ? new[] { "ProteinId", "Classification", "Method", "Organism" }
+        : new[] { "ProteinId" }; // Only group by ProteinId when adding new ones
+
+        // Variable properties (combination dimensions)
+        var variableProps = new[] {
+                "Residue",      // 1
+                "Binder",        // 2
+                "SoftwareName",     // 3
+                "SoftwareVersion",  // 4
+                "WaterModel",       // 5
+                "WaterModelType", // 6
+                "ForceField",       // 7
+                "SimulationMethod", // 8
+                "Temperature",      // 9
+                "Ions",             // 10
+                "IonConcentration", // 11
+                "SimulationLength", // 12
+                "Kd",               // 13
+                "KOff",             // 14
+                "KOn",              // 15
+                "FreeBindingEnergy", // 16
+
+                };
+
+        // Get distinct values for all variable properties
+        foreach (var prop in variableProps)
+        {
+            distinctValues[prop] = Article.ProteinData
+            .Select(p => GetPropertyValue(p, prop))
+            .Distinct()
+            .ToList();
+        }
+
+        // Group by fixed properties
+        List<IGrouping<dynamic, ProteinData>> proteinGroupsDynamic = null;
+        List<IGrouping<string, ProteinData>> proteinGroupsString = null;
+
+        if (combinationCategory != 0)
+        {
+            proteinGroupsDynamic = Article.ProteinData
+            .GroupBy(p => new
+            {
+                p.ProteinId,
+                p.Classification,
+                p.Method,
+                p.Organism
+            })
+            .Cast<IGrouping<dynamic, ProteinData>>()
+            .ToList();
+        }
+        else
+        {
+            proteinGroupsString = Article.ProteinData
+            .GroupBy(p => p.ProteinId)
+            .ToList();
+        }
+
+        // Group by fixed properties (ProteinId + Classification + Method + Organism)
+        var proteinGroups = Article.ProteinData
+        .GroupBy(p => new
+        {
+            p.ProteinId,
+            p.Classification,
+            p.Method,
+            p.Organism
+        })
+        .ToList();
+
+        var newCombinations = new List<ProteinData>();
+
+        foreach (var group in proteinGroups)
+        {
+            // Create base template with fixed properties
+            var baseData = new ProteinData
+            {
+                ArticleDoi = Article.Doi,
+                Approved = false,
+                ProteinId = combinationCategory == 0 ? combinationValueText : group.Key.ProteinId,
+                Classification = group.Key.Classification,
+                Method = group.Key.Method,
+                Organism = group.Key.Organism
+            };
+
+            // Get distinct values for variable properties from this group
+            var groupData = group.ToList();
+            var variablePropsValues = new Dictionary<string, List<object>>();
+
+            foreach (var prop in variableProps)
+            {
+                variablePropsValues[prop] = groupData
+                .Select(p => GetPropertyValue(p, prop))
+                .Distinct()
+                .ToList();
+            }
+
+            // Generate all combinations
+            var combinations = new List<Dictionary<string, object>>();
+            combinations.Add(new Dictionary<string, object>());
+
+            foreach (var prop in variableProps)
+            {
+                var newCombinationsTemp = new List<Dictionary<string, object>>();
+
+                foreach (var value in variablePropsValues[prop])
+                {
+                    foreach (var combo in combinations)
+                    {
+                        var newCombo = new Dictionary<string, object>(combo);
+                        newCombo[prop] = value;
+                        newCombinationsTemp.Add(newCombo);
+                    }
+                }
+
+                combinations = newCombinationsTemp;
+            }
+
+            // Apply combinations
+            foreach (var combo in combinations)
+            {
+                var newProteinData = new ProteinData(baseData);
+
+                foreach (var kvp in combo)
+                {
+                    SetPropertyValue(newProteinData, kvp.Key, kvp.Value);
+                }
+
+                // Override the selected combination category if needed
+                if (combinationCategory != 0)
+                {
+                    var propName = variableProps[combinationCategory - 1]; // Adjust index
+                    object value;
+                    if (IsNumericCategory(combinationCategory))
+                    {
+                        value = combinationValueNumeric;
+                    }
+                    else
+                    {
+                        value = combinationValueText;
+                    }
+
+                    SetPropertyValue(newProteinData, propName, value);
+                }
+
+                newCombinations.Add(newProteinData);
+            }
+        }
+        var distinctList = newCombinations
+        .GroupBy(x => new
+        {
+            x.ProteinId,
+            SoftwareName = x.SoftwareName?.ToLower(),
+            WaterModel = x.WaterModel?.ToLower(),
+            x.Residue,
+            x.Binder,
+            x.WaterModelType,
+            ForceFieldSoftware = x.ForceField?.ToLower(),
+            SimulationMethod = x.SimulationMethod?.ToLower(),
+            x.Temperature,
+            x.Ions,
+            x.IonConcentration,
+            x.SimulationLength,
+            x.Kd,
+            x.KOff,
+            x.KOn,
+            x.FreeBindingEnergy
+        })
+        .Select(g => g.First())
+        .ToList();
+        // Add combinations to the article's protein data
+        foreach (var combination in distinctList)
+        {
+            Article.ProteinData.Add(combination);
+        }
+
+        combinationCount = distinctList.Count;
+
+        await ArticleChanged.InvokeAsync(Article);
+        showCombinationResult = true;
+
+
+        // Show success message
+        await JSRuntime.InvokeVoidAsync("alert", $"Successfully created {combinationCount} new protein data combinations.");
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Helper methods to work with properties dynamically
+    private object GetPropertyValue(ProteinData data, string propertyName)
+    {
+        return data.GetType().GetProperty(propertyName)?.GetValue(data);
+    }
+
+    private void SetPropertyValue(ProteinData data, string propertyName, object value)
+    {
+        var prop = data.GetType().GetProperty(propertyName);
+        if (prop != null)
+        {
+            prop.SetValue(data, value);
+        }
+    }
+}
+
+<style>
+    .protein-table th, .protein-table td {
+        white-space: nowrap;
+        vertical-align: middle;
+        font-size: 0.95rem;
+    }
+
+    .protein-table th {
+        background: #e3f2fd;
+        font-weight: 600;
+    }
+
+    @@media (max-width: 768px) {
+        .protein-table th, .protein-table td {
+            font-size: 0.85rem;
+            padding: 0.3rem;
+        }
+    }
+</style>

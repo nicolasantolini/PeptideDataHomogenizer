@@ -1,21 +1,55 @@
 ﻿@page "/manage-discredited-journals"
 @using Entities
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
 @using SuperSimpleBlazorModal
+@inject JournalsService JournalsService
 @inject DatabaseDataHandler DatabaseDataHandler
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject UserProjectService UserProjectService
+@inject ArticleModerationService ArticleModerationService
 
 @rendermode InteractiveServer
 
 <h3 class="mb-4">Manage Discredited Journals</h3>
 
+@if (isRenderingPage)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+}
+else if(errorMessage != string.Empty)
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
+else{
+
 <div class="card shadow-sm">
     <div class="card-header bg-light">
         <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Journal List</h5>
-            <button class="btn btn-primary btn-sm" @onclick="ShowAddModal">
+            <div class="d-flex align-items-center gap-2">
+                <h5 class="mb-0">Discredited Journal List</h5>
+                <span class="info-tooltip" tabindex="0">
+                    <i class="bi bi-info-circle text-info" style="cursor: pointer;"></i>
+                    <span class="info-tooltip-text">
+                        To discredit a journal means that when a new article is obtained from the PubMed query search, if its Journal name matches exactly the name of a discredit Journal, then that article will be automatically discredited. Journals are discredited at a project level.
+                    </span>
+                </span>
+            </div>
+            <button class="btn btn-primary btn-sm" @onclick="ShowAddModal" disabled="@(UserRole == "visitor")">
                 <i class="bi bi-plus-lg"></i> Add Journal
             </button>
         </div>
+
+        
     </div>
 
     <div class="card-body">
@@ -40,6 +74,8 @@
                     <thead class="table-light">
                         <tr>
                             <th>Journal Title</th>
+                            <th>Discredited Reason</th>
+                            <th>Discredited By</th>
                             <th width="120px">Actions</th>
                         </tr>
                     </thead>
@@ -48,13 +84,15 @@
                         {
                             <tr>
                                 <td>@journal.Title</td>
+                                <td>@journal.DiscreditedReason</td>
+                                <td>@GetExtendedNameByUserId(journal.DiscreditedById).Result</td>
                                 <td>
                                     <button class="btn btn-sm btn-outline-secondary me-1"
-                                            @onclick="() => ShowEditModal(journal)">
+                                                @onclick="() => ShowEditModal(journal)" disabled="@(UserRole == "visitor")">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <button class="btn btn-sm btn-outline-danger"
-                                            @onclick="() => ShowDeleteModal(journal)">
+                                                @onclick="() => ShowDeleteModal(journal)" disabled="@(UserRole == "visitor")">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </td>
@@ -67,6 +105,10 @@
     </div>
 </div>
 
+}
+
+
+
 <SimpleModal @ref="journalModalRef"
                 Id="journal-modal"
                 ExtraCssClass=""
@@ -76,20 +118,37 @@
         <button type="button" class="btn-close" @onclick="CloseJournalModal" aria-label="Close"></button>
     </div>
     <div class="modal-body">
-        <EditForm Model="currentJournal" OnValidSubmit="HandleValidSubmit">
-            <DataAnnotationsValidator />
-            <div class="mb-3">
-                <label for="journalTitle" class="form-label">Journal Title *</label>
-                <InputText id="journalTitle" class="form-control" @bind-Value="currentJournal.Title" />
-                <ValidationMessage For="@(() => currentJournal.Title)" />
+        @if (showRetroactiveOption)
+        {
+            <div class="alert alert-warning">
+                <p>Do you want to retroactively discredit articles from this journal?</p>
+                <div class="form-check">
+                    <button type="button" class="btn btn-secondary me-2" @onclick="() => HandleValidSubmit(true)">Yes, retroactively</button>
+                    <button type="button" class="btn btn-primary" @onclick="() => HandleValidSubmit(false)">No, just save</button>
+                </div>
             </div>
-            <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-secondary" @onclick="CloseJournalModal">Cancel</button>
-                <button type="submit" class="btn btn-primary">
-                    @(isEditing ? "Update" : "Save")
-                </button>
-            </div>
-        </EditForm>
+        }
+        else
+        {
+            <EditForm Model="currentJournal">
+                <DataAnnotationsValidator />
+                <div class="mb-3">
+                    <label for="journalTitle" class="form-label">Journal Title *</label>
+                    <InputText id="journalTitle" class="form-control" @bind-Value="currentJournal.Title" />
+                </div>
+                <div class="mb-3">
+                    <label for="journalDescription" class="form-label">Reason to Discredit:</label>
+                    <InputTextArea id="journalDescription" class="form-control" @bind-Value="currentJournal.DiscreditedReason" />
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseJournalModal">Cancel</button>
+                    <button type="button" @onclick="ToggleRetroactiveOption" class="btn btn-primary">
+                        @(isEditing ? "Update" : "Save")
+                    </button>
+                </div>
+            </EditForm>
+        }
+        
     </div>
 </SimpleModal>
 
@@ -121,14 +180,73 @@
     private SimpleModal journalModalRef;
     private SimpleModal deleteModalRef;
 
-    protected override async Task OnInitializedAsync()
+    private ApplicationUser currentUser;
+
+    private string errorMessage = string.Empty;
+
+    private int? ProjectId = 0;
+
+    private bool isRenderingPage = true;
+    private string UserRole = string.Empty;
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadJournals();
+        if (firstRender)
+        {
+            isRenderingPage = true;
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (currentUser == null)
+            {
+                errorMessage = "You must be logged in to manage discredited journals.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            ProjectId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+            if (ProjectId == null || ProjectId <= 0)
+            {
+                errorMessage = "No project selected. Please select a project to manage discredited journals.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+            await LoadJournals();
+
+            UserRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(ProjectId.Value, currentUser.Id);
+            var roles = await UserManager.GetRolesAsync(currentUser);
+
+            if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+                UserRole = "admin";
+            if (UserRole == "")
+            {
+                errorMessage = "You do not have permission to view discredited journals for this project.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            isRenderingPage = false;
+            StateHasChanged();
+        }
     }
+
+    private async Task<string> GetExtendedNameByUserId(string id)
+    {
+        var user = await UserManager.FindByIdAsync(id);
+        return user?.ExtendedFullName ?? "Unknown User";
+    }
+
 
     private async Task LoadJournals()
     {
-        journals = await DatabaseDataHandler.GetAllAsync<DiscreditedJournal>();
+        journals = await JournalsService.GetDiscreditedJournalsAsync(ProjectId.Value);
+        if (journals == null)
+        {
+            journals = new List<DiscreditedJournal>();
+        }
+        StateHasChanged();
     }
 
     private void ShowAddModal()
@@ -146,23 +264,24 @@
         journalModalRef?.ShowModal();
     }
 
-    private async Task HandleValidSubmit()
+    private bool showRetroactiveOption = false;
+
+    private void ToggleRetroactiveOption()
     {
-        if (isEditing)
+        showRetroactiveOption = !showRetroactiveOption;
+    }
+    private async Task HandleValidSubmit(bool retroActive)
+    {
+        showRetroactiveOption = false;
+        currentJournal.ProjectId = ProjectId.Value;
+        currentJournal.DiscreditedById = currentUser.Id;
+
+        if(retroActive)
         {
-            // Find the original journal by title, update and save
-            var existing = await DatabaseDataHandler.GetByIdAsync<DiscreditedJournal>(originalTitle);
-            if (existing != null)
-            {
-                existing.Title = currentJournal.Title;
-                await DatabaseDataHandler.UpdateAsync(existing);
-            }
-        }
-        else
-        {
-            await DatabaseDataHandler.AddAsync(currentJournal);
+            await ArticleModerationService.DiscreditArticlesByJournalAndProjectIdAsync(currentJournal.Title, ProjectId.Value);
         }
 
+        await JournalsService.UpsertDiscreditedJournalAsync(currentJournal);
         await LoadJournals();
         journalModalRef?.CloseModal();
         StateHasChanged();

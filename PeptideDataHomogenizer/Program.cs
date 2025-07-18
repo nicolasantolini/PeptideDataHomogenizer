@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
 using PeptideDataHomogenizer;
 using PeptideDataHomogenizer.Components;
 using PeptideDataHomogenizer.Components.Account;
 using PeptideDataHomogenizer.Data;
+using PeptideDataHomogenizer.Services;
 using PeptideDataHomogenizer.State;
 using PeptideDataHomogenizer.Tools;
 using PeptideDataHomogenizer.Tools.ElsevierTools;
@@ -13,6 +16,7 @@ using PeptideDataHomogenizer.Tools.NotCurrentlyInUse;
 using PeptideDataHomogenizer.Tools.PubMedSearch;
 using PeptideDataHomogenizer.Tools.RegexExtractors;
 using PeptideDataHomogenizer.Tools.WileyTools;
+using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +31,7 @@ builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuth
 
 // Shared Services:
 builder.Services.AddTransient<ArticleExtractorFromHtml>();
+builder.Services.AddTransient<ImagesExtractorFromHtml>();
 builder.Services.AddScoped<IEUtilitiesService, EUtilitiesService>();
 builder.Services.AddScoped<IPubMedAPIConsumer, PubMedAPIConsumer>();
 builder.Services.AddScoped<IPageFetcher, PageFetcher>();
@@ -37,6 +42,37 @@ builder.Services.AddScoped<PDBRecordsExtractor>();
 builder.Services.AddScoped<LLMSimulationLengthExtractor>();
 builder.Services.AddScoped<PDBContextDataExtractor>();
 builder.Services.AddScoped<ArticleBrowserState>();
+
+//Services
+builder.Services.AddTransient<OrganizationService>();
+builder.Services.AddTransient<UserProjectService>();
+builder.Services.AddTransient<ArticleContentService>();
+builder.Services.AddTransient<ArticleModerationService>();
+builder.Services.AddTransient<ArticleService>();
+builder.Services.AddTransient<ProjectService>();
+builder.Services.AddTransient<UserService>();
+builder.Services.AddTransient<ProteinDataService>();
+builder.Services.AddTransient<UserOrganizationService>();
+builder.Services.AddTransient<ArticlePerProjectService>();
+builder.Services.AddTransient<ProteinDataPerProjectService>();
+builder.Services.AddTransient<JournalsService>();
+builder.Services.AddTransient<PublishersService>();
+
+// Add this before building the app
+//builder.WebHost.ConfigureKestrel(serverOptions =>
+//{
+//    serverOptions.ListenAnyIP(5001); // HTTP port
+//    serverOptions.ListenAnyIP(7155, listenOptions => // HTTPS port
+//    {
+//        listenOptions.UseHttps();
+//    });
+//});
+
+//// Make sure app is accessible on the network
+//builder.WebHost.UseUrls("http://*:5001");
+
+
+builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.AddTransient<DatabaseDataHandler>(provider =>
     new DatabaseDataHandler(provider.GetRequiredService<ApplicationDbContext>()));
 
@@ -54,27 +90,47 @@ builder.Services.AddCors(options =>
     });
 });
 
-
-
 // Add to services collection
 builder.Services.AddHttpClient();
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultScheme = IdentityConstants.ApplicationScheme;
-        options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
-    })
-    .AddIdentityCookies();
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+// Use SQLite database in the Data folder
+var sqlitePath = Path.Combine(builder.Environment.ContentRootPath, "Data", "Application.db");
+//var connectionString = $"Data Source={sqlitePath}";
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+// Ensure the directory exists
+var dataDirectory = Path.GetDirectoryName(sqlitePath);
+if (!Directory.Exists(dataDirectory))
+{
+    Directory.CreateDirectory(dataDirectory);
+}
+
+
+
+////sqlite databse
+//builder.Services.AddDbContext<ApplicationDbContext>(options =>
+//    options.UseSqlite(connectionString));
+
+//use sqlserver database from connection string
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.MigrationsAssembly("PeptideDataHomogenizer");
+        sqlOptions.EnableRetryOnFailure();
+    }));
+
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
-builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
+// Replace both identity configurations with this single one:
+builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+    {
+        options.SignIn.RequireConfirmedAccount = false;
+    })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
+
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
@@ -83,11 +139,18 @@ builder.Services.ConfigureApplicationCookie(opt =>
         opt.EventsType = typeof(CookieEvents)
     );
 
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("SuperAdminOnly", policy =>
+        policy.RequireRole("SuperAdmin"));
+    options.AddPolicy("IsAdmin", policy =>
+        policy.RequireRole("Admin", "SuperAdmin"));
+});
+
 var app = builder.Build();
 
-
 app.UseCors(options => options.AllowAnyOrigin());
-// --- Start Python Flask API when the app starts ---
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -101,8 +164,77 @@ else
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+using (var serviceScope = app.Services.GetService<IServiceScopeFactory>().CreateScope())
+{
+    var context = serviceScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
+    context.Database.Migrate();
+}
+
+//ensure the following roles are created: "User", "Admin", "SuperAdmin"
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var roles = new[] { "User", "Admin", "SuperAdmin" };
+    foreach (var role in roles)
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+        {
+            await roleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+}
+
+//ensure the following user is created: "nicola.santolini@live.com" with password "Password123!"
+using (var scope = app.Services.CreateScope())
+{
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var email = "fakeuser@admin.com";
+    var password = "Password123!";
+    var user = await userManager.FindByEmailAsync(email);
+    if (user == null)
+    {
+        user = new ApplicationUser
+        {
+            UserName = email,
+            Email = email,
+            PhoneNumberConfirmed = true, 
+            EmailConfirmed = true 
+        };
+        var result = await userManager.CreateAsync(user, password);
+        if (result.Succeeded)
+        {
+            // Assign the "SuperAdmin" role to the user
+            await userManager.AddToRoleAsync(user, "SuperAdmin");
+        }
+    }
+    else
+    {
+        // If the user already exists, ensure they are in the "SuperAdmin" role
+        if (!await userManager.IsInRoleAsync(user, "SuperAdmin"))
+        {
+            await userManager.AddToRoleAsync(user, "SuperAdmin");
+        }
+    }
+}
+
+using (var scope = app.Services.CreateScope())
+{
+    var databaseInitializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+    await databaseInitializer.InitializeDatabase();
+}
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    ServeUnknownFileTypes = true, // Temporary for debugging
+    OnPrepareResponse = ctx => {
+        // Log requests for static files
+        Console.WriteLine($"Serving static file: {ctx.File.PhysicalPath}");
+    }
+});
+
+
+//app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
@@ -112,7 +244,5 @@ app.MapRazorComponents<App>()
 
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
-
-
 
 app.Run();

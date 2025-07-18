@@ -1,0 +1,166 @@
+﻿@using Entities
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
+@inject IJSRuntime JSRuntime
+@inject DatabaseDataHandler DatabaseDataHandler
+@inject ProjectService ProjectService
+
+@rendermode InteractiveServer
+
+<style>
+    /* Keep existing styles, they're good */
+    .context-header-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 32px;
+        min-height: 30px;
+        padding: 0 1.5rem;
+        background: linear-gradient(90deg, #2d3e50 0%, #4e73df 100%);
+        color: #fff;
+        font-size: 1rem;
+        font-weight: 500;
+        box-shadow: 0 1px 4px rgba(44, 62, 80, 0.08);
+        border-radius: 0 0 8px 8px;
+        position: relative;
+        z-index: 10;
+    }
+
+        .context-header-bar .context-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+            .context-header-bar .context-info i {
+                font-size: 1.2rem;
+                margin-right: 0.3rem;
+                color: #f8f9fc;
+            }
+
+        .context-header-bar .context-switch-btn {
+            background: #fff;
+            color: #4e73df;
+            border: none;
+            border-radius: 5px;
+            padding: 0.2rem 0.9rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(44, 62, 80, 0.07);
+            transition: background 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            height: 26px;
+        }
+
+            .context-header-bar .context-switch-btn:hover {
+                background: #4e73df;
+                color: #fff;
+            }
+</style>
+
+<div class="context-header-bar">
+    <div class="context-info">
+        @if (CurrentOrganization != null && CurrentProject != null)
+        {
+            <i class="bi bi-diagram-3-fill"></i>
+            <span>Working in <strong>@CurrentProject.Name</strong> of <strong>@CurrentOrganization.Name</strong></span>
+        }
+        else if (CurrentOrganization != null)
+        {
+            <i class="bi bi-building"></i>
+            <span>You are in <strong>@CurrentOrganization.Name</strong> (no project selected)</span>
+        }
+        else
+        {
+            <span>No context selected</span>
+        }
+    </div>
+    <button class="context-switch-btn m-3 p-1" @onclick="ShowContextModal" title="Switch Context">
+        <i class="bi bi-arrow-repeat"></i>
+        Switch
+    </button>
+</div>
+
+@if (showContextModal)
+{
+    <ChooseContext ShowModal="@showContextModal"
+                   ShowModalChanged="CloseContextModal"
+                   CurrentOrganizationIdParam="currentOrganizationContextId"
+                   CurrentProjectIdParam="currentProjectContextId" />
+}
+
+@code {
+    private int? currentOrganizationContextId = null;
+    private int? currentProjectContextId = null;
+    private bool showContextModal = false;
+    private Organization CurrentOrganization;
+    private Project CurrentProject;
+
+    private void ShowContextModal()
+    {
+        showContextModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseContextModal(bool newValue)
+    {
+        showContextModal = newValue;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            //wait 8 seconds to ensure the context is set
+            await Task.Delay(2500);
+            await RefreshContextAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+    }
+
+    public async Task RefreshContextAsync()
+    {
+        // Get organization context first
+        currentOrganizationContextId = await ContextCookieManager.GetContextAsync(JSRuntime);
+
+        if (currentOrganizationContextId.HasValue)
+        {
+            CurrentOrganization = await DatabaseDataHandler.GetByIdAsync<Organization>(currentOrganizationContextId.Value);
+
+            // Then get project context
+            currentProjectContextId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+            if (currentProjectContextId.HasValue && currentProjectContextId > 0)
+            {
+                CurrentProject = await DatabaseDataHandler.GetByIdAsync<Project>(currentProjectContextId.Value);
+                
+
+                // Verify project belongs to organization
+                if (CurrentProject == null || CurrentProject.OrganizationId != currentOrganizationContextId.Value)
+                {
+                    // Reset project context if it doesn't belong to current org
+                    await ProjectCookieManager.SetProjectAsync(JSRuntime, 0); // Or clear it
+                    CurrentProject = null;
+                    currentProjectContextId = null;
+                }
+            }
+        }
+        else
+        {
+            CurrentOrganization = null;
+            CurrentProject = null;
+            currentProjectContextId = null;
+        }
+
+        StateHasChanged();
+    }
+}

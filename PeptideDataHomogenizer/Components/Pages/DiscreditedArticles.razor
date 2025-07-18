@@ -2,29 +2,121 @@
 
 
 @using Entities  
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data  
-@inject DatabaseDataHandler DatabaseDataHandler  
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
+@inject ArticlePerProjectService ArticlePerProjectService
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject UserProjectService UserProjectService
+@inject UserOrganizationService UserOrganizationService
 @rendermode InteractiveServer
+<div class="discredited-articles-container">
+    <div class="header-section mb-4">
+        <h3 class="text-danger">Discredited Articles</h3>
+        @if (isRenderingPage)
+        {
+            <div class="loading-progress">
+                <div class="spinner"></div>
+                <p>Loading articles...</p>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">
+                <strong>Error:</strong> @errorMessage
+            </div>
+        }
+        else if (Articles.Count == 0)
+        {
+            <div class="alert alert-success">
+                No discredited articles found.
+            </div>
+        }
+        else if(projectId == 0)
+        {
+            <div class="alert alert-warning">
+                Please select a project to view discredited articles.
+            </div>
+        }
+        else
+        {
+            <PeptideDataHomogenizer.Components.SharedComponents.DiscreditedArticlesComponent Articles="@Articles" UserProjectRole="@UserRole"/>
+        }
 
-@if (Articles == null)
-{
-    <div class="loading-progress">
-        <div class="spinner"></div>
-        <p>Loading articles...</p>
     </div>
-}
-else{
-    <PeptideDataHomogenizer.Components.SharedComponents.DiscreditedArticlesComponent Articles="Articles" DatabaseDataHandler="DatabaseDataHandler" />  
-}
+</div>
 @code {  
 
-    private List<Article> Articles;  
+    private Dictionary<Article,ArticlePerProject> Articles = new();  
+
+    private int? projectId=0;
+    private bool isRenderingPage = true;
+    private string errorMessage = string.Empty;
+    private ApplicationUser currentUser;
+    private string UserRole = string.Empty;
+    private int? currentProjectId;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)  
     {  
         if (firstRender)  
-        {  
-            Articles = await DatabaseDataHandler.GetDiscreditedArticlesAsync(true);  
+        {
+            isRenderingPage = true;
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (currentUser == null)
+            {
+                errorMessage = "User not found. Please log in.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            currentProjectId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+
+            if (currentProjectId.HasValue && currentProjectId.Value > 0)
+            {
+            }
+            else
+            {
+                errorMessage = "No project selected. Please select a project to view protein data.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            UserRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(currentProjectId.Value, currentUser.Id);
+
+            var roles = await UserManager.GetRolesAsync(currentUser);
+
+            if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+            {
+                UserRole = "admin";
+            }
+            int? currentOrganizationId = await ContextCookieManager.GetContextAsync(JSRuntime);
+            if (currentOrganizationId == null || currentOrganizationId < 1)
+            {
+                errorMessage = "No organization selected. Please select an organization to view protein data.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            var organizationRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(currentOrganizationId.Value, currentUser.Id);
+
+            if ((UserRole == null || UserRole == string.Empty) && organizationRole != null && organizationRole != string.Empty)
+            {
+                UserRole = "visitor";
+            }
+            if (UserRole == "")
+            {
+                errorMessage = "You do not have permission to view this project.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            Articles = await ArticlePerProjectService.GetDiscreditedArticlesByProjectAsync(projectId.Value);
+            isRenderingPage = false;
             StateHasChanged();  
         }  
     }  

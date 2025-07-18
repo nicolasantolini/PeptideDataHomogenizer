@@ -1,11 +1,27 @@
 ﻿@using System.Linq
 @using Entities
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
+
+@inject ArticlePerProjectService ArticlePerProjectService
+@inject IJSRuntime JSRuntime
+
+@if (ArticlesPerProject == null)
+{
+    //Loading spinner
+    <div class="text-center my-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else{
 
 <div class="text-center my-3">
-    @if (Articles != null && Articles.Any())
+        @if (ArticlesPerProject != null && ArticlesPerProject.Any())
     {
-        var totalArticles = Articles.Count;
-        var articlesWithValidFullText = Articles.Count(article => HasLargeFullText(article));
+            var totalArticles = ArticlesPerProject.Count;
+            var articlesWithValidFullText = ArticlesPerProject.Count(article => HasLargeFullText(article.Article));
         var proportion = (double)articlesWithValidFullText / totalArticles * 100;
 
         <p class="alert alert-info">
@@ -13,7 +29,7 @@
             have valid full text (<strong>@proportion.ToString("0.00")%</strong>).
         </p>
         //article with protein records
-        var articlesWithProteinRecords = Articles.Count(article => article.ProteinData != null && article.ProteinData.Any());
+            var articlesWithProteinRecords = ArticlesPerProject.Count(article => article.Article.ProteinData != null && article.Article.ProteinData.Any());
         var proportionWithProteinRecords = (double)articlesWithProteinRecords / totalArticles * 100;
         <p class="alert alert-info">
             <strong>@articlesWithProteinRecords</strong> out of <strong>@totalArticles</strong> articles 
@@ -46,19 +62,19 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var article in (Articles ?? Enumerable.Empty<Article>())
-            .OrderBy(a => HasLargeFullText(a) ? 1 : 0))
+            @foreach (var article in (ArticlesPerProject ?? Enumerable.Empty<ArticlePerProject>()).OrderBy(a => HasLargeFullText(a.Article) ? 1 : 0)
+            .OrderBy(a => HasLargeFullText(a.Article) ? 1 : 0))
             {
-            <tr @onclick="async () => await ShowArticleDetails(article)"
-                class="clickable-row @(article.Discredited ? "discredited-row" : (article.Completed && !article.Discredited ? "completed-row" : ""))"
-                style="cursor: pointer;">
-                    <td>@article.Title</td>
-                    <td>@article.Journal</td>
-                    <td>@article.Authors</td>
-                    <td>@article.PublicationDate.ToShortDateString()</td>
-                    <td>@article.Doi</td>
+                <tr @onclick="async () => await ShowArticleDetails(article.Article)"
+    class="clickable-row @GetRowClass(article)"
+    style="cursor: pointer;">
+                    <td>@article.Article.Title</td>
+                    <td>@article.Article.Journal</td>
+                    <td>@article.Article.Authors</td>
+                    <td>@article.Article.PublicationDate.ToShortDateString()</td>
+                    <td>@article.Article.Doi</td>
                     <td>
-                        @if (HasLargeFullText(article))
+                        @if (HasLargeFullText(article.Article))
                         {
                             <span class="text-success">Yes</span>
                         }
@@ -68,7 +84,7 @@
                         }
                     </td>
                     <td>
-                        @if (article.ProteinData != null && article.ProteinData.Any())
+                        @if (article.Article.ProteinData != null && article.Article.ProteinData.Any())
                         {
                             <span class="text-success">Yes</span>
                         }
@@ -78,13 +94,37 @@
                         }
                     </td>
                 </tr>
+                @if (
+                        article?.Article.ProteinData != null &&
+                        article.Article.ProteinData.Any() &&
+                        ArticlesPerProject?.FirstOrDefault(app => app?.ArticleId == article?.Article.Doi) is ArticlePerProject appArticle &&
+                        !appArticle.IsApproved &&
+                        article.Article.ProteinData.All(pd => pd?.Id != 0)
+                        )
+                {
+                    <tr>  
+                        <td colspan="7">  
+                            <div class="alert alert-primary d-flex align-items-center" style="font-size:1.1em;">  
+                                <i class="bi bi-arrow-right-circle-fill me-2" style="font-size:1.5em;"></i>  
+                                <span>
+                                    <strong>Continue...</strong> This message refers to article: <em>@article.Article.Title</em>.
+                                </span>  
+                            </div>  
+                        </td>  
+                    </tr>  
+                }
             }
     </tbody>
 </table>
 
-<ArticleDetailModal @ref="modalRef"
-Article="selectedArticle"
-OnModalStateChange="HandleModalStateChange" />
+    @if (selectedArticle != null)
+    {
+        <ArticleDetailModal Article="@selectedArticle"
+                            ArticlePerProject="@(ArticlesPerProject.FirstOrDefault(app=>app.ArticleId == selectedArticle.Doi))"
+                            OnModalStateChange="HandleModalStateChange" />
+    }
+
+}
 
 <style>
 
@@ -101,10 +141,26 @@ OnModalStateChange="HandleModalStateChange" />
 
 @code {
     [Parameter]
-    public List<Article>? Articles { get; set; }
+    public List<ArticlePerProject>? ArticlesPerProject { get; set; }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        //print chapters per article
+        if (ArticlesPerProject == null || !ArticlesPerProject.Any())
+        {
+            return; // No articles to display
+        }
+        StateHasChanged();
+
+
+    }
+
 
     private ArticleDetailModal? modalRef;
     private Article? selectedArticle;
+    private ArticlePerProject? selectedArticlePerProject;
+
 
     private string JoinAuthors(IEnumerable<AuthorInfo> authors)
         => string.Join(", ", authors.Take(3).Select(a => a.LastName + " " + a.FirstName?.FirstOrDefault() + ".")) 
@@ -127,11 +183,19 @@ OnModalStateChange="HandleModalStateChange" />
 
     private async Task ShowArticleDetails(Article article)
     {
-        selectedArticle = article;
-        if (modalRef != null)
+        if (article == null || string.IsNullOrEmpty(article.Doi) || 
+            !ArticlesPerProject.Any(a => a.ArticleId == article.Doi))
         {
-            await modalRef.Show();
+            return; // No valid article or project data available
         }
+
+
+        selectedArticle = article;
+        selectedArticle.Chapters = article.Chapters;
+        //print chapter count for both
+        Console.WriteLine($"Selected Article: {article.Title}, Chapters Count: {article.Chapters?.Count ?? 0}");
+
+
     }
 
     private async Task HandleModalStateChange(bool isOpen)
@@ -141,5 +205,19 @@ OnModalStateChange="HandleModalStateChange" />
             selectedArticle = null;
             StateHasChanged();
         }
+
     }
+
+    private string GetRowClass(ArticlePerProject article)
+    {
+        if (article == null || string.IsNullOrEmpty(article.ArticleId) || 
+            !ArticlesPerProject.Any(a => a.ArticleId == article.ArticleId))
+        {
+            return string.Empty;
+        }
+        
+        return article.IsDiscredited ? "discredited-row" : 
+              (article.IsApproved && !article.IsDiscredited ? "completed-row" : "");
+    }
+
 }

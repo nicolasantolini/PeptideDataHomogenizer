@@ -47,7 +47,7 @@
             _rateLimiter = new SemaphoreSlim(1, 1);
         }
 
-        public async Task<List<Chapter>> DownloadArticleAsync(string articleDoi,string title, string headersOutputFilePath = null)
+        public async Task<(List<Chapter>,List<ExtractedTable>,List<ImageHolder>)> DownloadArticleAsync(string articleDoi,string title, string headersOutputFilePath = null)
         {
             if (string.IsNullOrWhiteSpace(articleDoi))
             {
@@ -77,7 +77,7 @@
                 if (!response.IsSuccessStatusCode)
                 {
                     await HandleErrorResponseAsync(response, articleDoi);
-                    return null;
+                    return (new List<Chapter>(), new List<ExtractedTable>(), new List<ImageHolder>());
                 }
 
                 // Save the PDF
@@ -85,9 +85,9 @@
                 var content = PdfCreationTools.ConvertPdfToHtml(pdfBytes);
                 Console.WriteLine("PDF successfully converted to HTML.");
 
-                var chapters = _articleExtractor.ExtractChapters(content, title,"");
+                var extractedData = await _articleExtractor.ExtractChaptersImagesAndTables(content, title,"");
 
-                return chapters;
+                return (extractedData.Item1,extractedData.Item2,extractedData.Item3);
             }
             finally
             {

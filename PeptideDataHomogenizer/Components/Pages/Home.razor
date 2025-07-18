@@ -1,8 +1,11 @@
 ﻿@page "/"
 @using System.Collections.Concurrent
 @using Entities
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Components.SharedComponents
+@using PeptideDataHomogenizer.Data
 @using PeptideDataHomogenizer.Data.State
+@using PeptideDataHomogenizer.Services
 @using PeptideDataHomogenizer.State
 @using PeptideDataHomogenizer.Tools
 @using SuperSimpleBlazorModal
@@ -10,62 +13,208 @@
 @inject IFullArticleDownloader FullArticleDownloader
 @inject ArticleBrowserState State
 @inject IJSRuntime JSRuntime
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserOrganizationService UserOrganizationService
+@inject ProjectService ProjectService
+@inject ArticlePerProjectService ArticlePerProjectService
+@inject UserProjectService UsersPerProjectService
+@inject ProteinDataPerProjectService ProteinDataPerProjectService
 
-<PageTitle>PubMed Article Browser</PageTitle>
+<h3 class="mb-4">PubMed Article Browser</h3>
 
-<div class="container mt-4">
-    <h1 class="text-center mb-4">Article Browser</h1>
-
-    <div class="row mb-3">
-        <div class="col-md-4">
-            <label for="queryInput" class="form-label">Search Query</label>
-            <input id="queryInput" class="form-control" @bind="query" placeholder="Enter search query" />
-        </div>
-        <div class="col-md-4">
-            <label for="pageSizeInput" class="form-label">Page Size</label>
-            <input id="pageSizeInput" type="number" class="form-control" @bind="pageSize" min="1" />
-        </div>
-        <div class="col-md-4 d-flex align-items-end">
-            <button class="btn btn-primary w-100" @onclick="()=>SearchArticles(true)">Search</button>
-        </div>
+@if (isRenderingPage)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading...</p>
     </div>
+}
+else
+{
+    <div class="container mt-4">
 
-    @if (isLoading)
-    {
-        <div class="loading-progress">
-            <div class="spinner"></div>
-            <p>Loading articles...</p>
-        </div>
-    }
-    else if (errorMessage != null)
-    {
-        <div class="alert alert-danger">
-            @errorMessage
-            <button class="btn btn-sm btn-secondary" @onclick="Reload">Retry</button>
-        </div>
-    }
-    else if (CurrentArticles != null)
-    {
-        <ArticlesTable Articles="CurrentArticles" />
+        @if (UserRole == "visitor")
+        {
+            <div class="alert alert-warning">
+                You do not have access to this page. You are only allowed to view the protein data from the page "Protein Data"
+            </div>
+        }
+        @if (organizationId == null || organizationId < 1)
+        {
+            <div class="alert alert-warning">
+                Please select an organization to view articles.
+            </div>
+        }
 
-        <div class="d-flex justify-content-between align-items-center mt-3">
-            <button class="btn btn-outline-primary" @onclick="PreviousPage" disabled="@(!CanGoToPreviousPage)">← Previous</button>
-            <span>Page @pageNr of @TotalPages</span>
-            <button class="btn btn-outline-primary" @onclick="NextPage">Next →</button>
-        </div>
+        @if (projectId == null || projectId < 1)
+        {
+            <div class="alert alert-warning">
+                Please select a project to view articles.
+            </div>
+        }
+        @if (projectId > 0 && organizationId > 0 && (UserRole == "editor" || UserRole == "admin"))
+        {
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label for="queryInput" class="form-label">Search Query</label>
+                    <input id="queryInput" class="form-control" @bind="query" placeholder="Enter search query" />
+                </div>
+                <div class="col-md-4">
+                    <label for="pageSizeInput" class="form-label">Page Size</label>
+                    <input id="pageSizeInput" type="number" class="form-control" @bind="pageSize" min="1" />
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" @onclick="() => SearchArticles(true)" disabled="@isLoading">Search</button>
+                </div>
+            </div>
+
+            <div class="row mb-3 g-2">
+                <div class="col-md-2">
+                    <div class="tooltip-container">
+                        <label for="sortInput" class="form-label">
+                            Sort By <span class="tooltip-icon">i<span class="tooltip-text">pub_date – descending sort by publication date<br>Author – ascending sort by first author<br>JournalName – ascending sort by journal name<br>relevance – default sort order, ("Best Match") on web PubMed</span></span>
+                        </label>
+                        <select id="sortInput" class="form-select" @bind="sort">
+                            <option value="relevance">Relevance</option>
+                            <option value="pub_date">Publication Date</option>
+                            <option value="Author">Author</option>
+                            <option value="JournalName">Journal Name</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="tooltip-container">
+                        <label for="fieldInput" class="form-label">
+                            Field <span class="tooltip-icon">i<span class="tooltip-text">@fieldInfoMessage</span></span>
+                        </label>
+                        <input id="fieldInput" class="form-control" @bind="field" placeholder="e.g. [Prion Protein]" />
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="tooltip-container">
+                        <label for="relDateInput" class="form-label">
+                            Relative Days <span class="tooltip-icon">i<span class="tooltip-text">@relDateInfoMessage</span></span>
+                        </label>
+                        <input id="relDateInput" type="number" class="form-control" @bind="relDate" min="0" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="tooltip-container">
+                        <label for="minDateInput" class="form-label">
+                            From Date <span class="tooltip-icon">i<span class="tooltip-text">@dateInfoMessage</span></span>
+                        </label>
+                        <input id="minDateInput" type="date" class="form-control" @bind="mindate" />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="tooltip-container">
+                        <label for="maxDateInput" class="form-label">
+                            To Date <span class="tooltip-icon">i<span class="tooltip-text">@dateInfoMessage</span></span>
+                        </label>
+                        <input id="maxDateInput" type="date" class="form-control" @bind="maxdate" />
+                    </div>
+                </div>
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="loading-progress">
+                    <div class="spinner"></div>
+                    <p>Loading articles...</p>
+                </div>
+            }
+            else if (errorMessage != null)
+            {
+                <div class="alert alert-danger">
+                    @errorMessage
+                    <button class="btn btn-sm btn-secondary" @onclick="Reload">Retry</button>
+                </div>
+            }
+            else if (currentArticlesPerProject != null)
+            {
+                <ArticlesTable ArticlesPerProject="@currentArticlesPerProject" />
+
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <button class="btn btn-outline-primary" @onclick="PreviousPage" disabled="@(!CanGoToPreviousPage)">← Previous</button>
+                    <span>Page @pageNr of @TotalPages</span>
+                    <button class="btn btn-outline-primary" @onclick="NextPage">Next →</button>
+                </div>
+            }
+        }
+    </div>
+}
+
+<style>
+    .tooltip-container {
+        position: relative;
+        display: inline-block;
+        width: 100%;
     }
-</div>
+
+    .tooltip-icon {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        margin-left: 4px;
+        background-color: #6c757d;
+        color: white;
+        border-radius: 50%;
+        text-align: center;
+        font-size: 12px;
+        font-style: normal;
+        line-height: 16px;
+        cursor: help;
+    }
+
+    .tooltip-text {
+        visibility: hidden;
+        width: 200px;
+        background-color: #555;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 8px;
+        position: absolute;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        margin-left: -100px;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .tooltip-icon:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+    }
+</style>
 
 @code {
     private bool isLoading = false;
+    private bool isRenderingPage = true;
     private string? errorMessage;
     private string query = "prion protein molecular dynamics simulation";
     private int pageNr => State.PageNr;
-    private int pageSize = 15;
+    private int pageSize = 5;
+    private string field = "";
+    private string fieldInfoMessage = "Search field. If used, the entire search term will be limited to the specified Entrez field.";
+    private int relDate = 0; // Default to no relative date filter
+    private string relDateInfoMessage = "When reldate is set to an integer n, the search returns only those items that have a date specified by datetype within the last n days.";
+    private DateTime? mindate = null; 
+    private DateTime? maxdate = null;
+    private string dateInfoMessage = "Date range used to limit a search result by the date specified by datetype. These two parameters (mindate, maxdate) must be used together to specify an arbitrary date range.";
+    private string sort = "relevance"; // Default sort order
+
+    private int? organizationId = 0;
+    private int? projectId = 0;
 
     private bool CanGoToPreviousPage => pageNr > 1;
 
-    private List<Article>? CurrentArticles => 
+    private string UserRole = ""; // Default role
+
+    private List<ArticlePerProject> currentArticlesPerProject =>
         State.ArticlesByPage.TryGetValue(pageNr, out var articles) ? articles : null;
 
     private int TotalPages => State.ArticlesByPage.Keys.Count > 0 ? State.ArticlesByPage.Keys.Max() : 0;
@@ -74,21 +223,108 @@
     {
         if (firstRender)
         {
+            isRenderingPage = true;
+            Console.WriteLine("OnAfterRenderAsync: firstRender = true");
+            var user = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (user == null)
+            {
+                Console.WriteLine("OnAfterRenderAsync: user is null");
+                errorMessage = "User not found. Please log in.";
+                isRenderingPage = false;
+                return;
+            }
+
+            var roles = await UserManager.GetRolesAsync(user);
+            Console.WriteLine($"OnAfterRenderAsync: user roles = {string.Join(",", roles)}");
+
+            var organizations = await UserOrganizationService.GetOrganizationsByUserIdAsync(user.Id);
+            organizationId = await ContextCookieManager.GetContextAsync(JSRuntime);
+
+            // Ensure organizationId is valid and user has access
+            if (organizations.Any() && (!organizations.Any(o => o.Id == organizationId) || organizationId < 1))
+            {
+                var firstOrgId = organizations.First().Id;
+                Console.WriteLine($"OnAfterRenderAsync: setting organizationId to firstOrgId = {firstOrgId}");
+                await ContextCookieManager.SetContextAsync(JSRuntime, firstOrgId);
+                organizationId = firstOrgId;
+            }
+
+            if (organizationId == null || organizationId < 1 || (!organizations.Any(o => o.Id == organizationId) && !roles.Contains("Admin") && !roles.Contains("SuperAdmin")))
+            {
+                Console.WriteLine("OnAfterRenderAsync: invalid organizationId");
+                errorMessage = "Please select an organization from the context header.";
+                await ContextCookieManager.SetContextAsync(JSRuntime, 0);
+                await ProjectCookieManager.SetProjectAsync(JSRuntime, 0);
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            projectId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+            Console.WriteLine($"OnAfterRenderAsync: projectId from cookie = {projectId}");
+            if (!projectId.HasValue || projectId.Value < 1)
+            {
+                Console.WriteLine("OnAfterRenderAsync: invalid projectId");
+                errorMessage = "Please select a project from the context header.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            UserRole = await UsersPerProjectService.GetRoleByProjectIdAndUserIdAsync(projectId.Value, user.Id);
+            Console.WriteLine($"OnAfterRenderAsync: UserRole from UsersPerProjectService = {UserRole}");
+
+            if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+            {
+                Console.WriteLine("OnAfterRenderAsync: user is Admin or SuperAdmin, setting UserRole to admin");
+                UserRole = "admin";
+            }
+
+            var organizationRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(organizationId.Value, user.Id);
+
+            if ((UserRole == null ||UserRole == string.Empty) && organizationRole!=null && organizationRole!= string.Empty)
+            {
+                UserRole = "visitor";
+            }
+
+
+            if (UserRole == null)
+            {
+                Console.WriteLine("OnAfterRenderAsync: UserRole is null");
+                errorMessage = "You do not have access to this project.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
             // Initialize from State if available
             if (!string.IsNullOrEmpty(State.CurrentQuery))
+            {
+                Console.WriteLine($"OnAfterRenderAsync: setting query from State.CurrentQuery = {State.CurrentQuery}");
                 query = State.CurrentQuery;
+            }
 
             if (State.PageSize > 0)
+            {
+                Console.WriteLine($"OnAfterRenderAsync: setting pageSize from State.PageSize = {State.PageSize}");
                 pageSize = State.PageSize;
+            }
 
             if (State.PageNr == 0)
+            {
+                Console.WriteLine("OnAfterRenderAsync: State.PageNr is 0, setting to 1");
                 State.PageNr = 1;
+            }
 
             // Load current page if cached
             if (State.ArticlesByPage.ContainsKey(pageNr))
             {
+                Console.WriteLine($"OnAfterRenderAsync: ArticlesByPage contains pageNr = {pageNr}");
                 StateHasChanged();
             }
+            isRenderingPage = false;
+            Console.WriteLine("OnAfterRenderAsync: finished initialization, calling StateHasChanged");
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -97,6 +333,34 @@
         if (string.IsNullOrEmpty(query))
         {
             await JSRuntime.InvokeVoidAsync("alert", "Query field cannot be empty.");
+            return;
+        }
+
+        if(mindate.HasValue && maxdate.HasValue && mindate > maxdate)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "From date cannot be after To date.");
+            return;
+        }
+        if(mindate.HasValue && !maxdate.HasValue)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please specify a To date when using From date.");
+            return;
+        }
+        if(!mindate.HasValue && maxdate.HasValue)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please specify a From date when using To date.");
+            return;
+        }
+
+        if (relDate < 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Relative date cannot be negative.");
+            return;
+        }
+
+        if (pageSize > 15)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Page size cannot be larger than 15.");
             return;
         }
 
@@ -117,7 +381,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error: {ex.Message}";
+            errorMessage = $"Error: {ex}";
         }
         finally
         {
@@ -128,24 +392,110 @@
 
     private async Task LoadPage(int page)
     {
+        if (string.IsNullOrEmpty(query))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Query field cannot be empty.");
+            return;
+        }
+
+        if (mindate.HasValue && maxdate.HasValue && mindate > maxdate)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "From date cannot be after To date.");
+            return;
+        }
+        if (mindate.HasValue && !maxdate.HasValue)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please specify a To date when using From date.");
+            return;
+        }
+        if (!mindate.HasValue && maxdate.HasValue)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please specify a From date when using To date.");
+            return;
+        }
+
+        if (relDate < 0)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Relative date cannot be negative.");
+            return;
+        }
         isLoading = true;
         // Return cached data if available
-        if (State.ArticlesByPage.ContainsKey(page)){
+        if (State.ArticlesByPage.ContainsKey(page))
+        {
+            await LoadArticlesPerProject(State.ArticlesByPage[page].Select(abp=>abp.Article).ToList());
             isLoading = false;
             return;
         }
 
-        // Otherwise fetch new data
-        var articles = await FullArticleDownloader.GetArticlesFromPubMedQuerySequential(
-            query, page, pageSize);
-
-        if (articles != null)
+        AdditionalQueryParams additionalQueryParams = new AdditionalQueryParams
         {
-            State.ArticlesByPage[page] = articles;
+            Field = field,
+            RelDate = relDate,
+            MinDate = mindate,
+            MaxDate = maxdate,
+            Sort = sort
+        };
+
+        // Otherwise fetch new data
+        if (projectId.HasValue)
+        {
+            var articles = await FullArticleDownloader.GetArticlesFromPubMedQuerySequential(
+                query, page, pageSize, projectId.Value,additionalQueryParams);
+
+            if (articles != null)
+            {
+                await LoadArticlesPerProject(articles);
+            }
         }
 
-        
         isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadArticlesPerProject(List<Article> articles)
+    {
+        if (articles == null || !articles.Any() || projectId == null || projectId < 1)
+        {
+            State.ArticlesByPage[pageNr] = new List<ArticlePerProject>();
+            return;
+        }
+
+        var articlePerProjectsList = await ArticlePerProjectService.GetArticlesByProjectAndListOfArticleDoisAsync(
+            projectId.Value, articles.Select(a => a.Doi).ToList()
+        );
+
+        // Create a lookup dictionary for faster access by DOI
+        var articlePerProjectsLookup = articlePerProjectsList
+            .ToDictionary(ap => ap.ArticleId, ap => ap);
+
+        // Map articles to their project data using the lookup
+        State.ArticlesByPage[pageNr] = articles
+            .Select(article => 
+            {
+                articlePerProjectsLookup.TryGetValue(article.Doi, out var articlePerProject);
+                if (articlePerProject != null)
+                {
+                    return articlePerProject;
+                }
+                var proteinData = ProteinDataPerProjectService.GetProteinDataByProjectIdAndArticleDoiAsync(projectId.Value, article.Doi).Result;
+                if (proteinData != null && proteinData.Count>0)
+                {
+                    article.ProteinData = proteinData;
+                }
+                return new ArticlePerProject
+                {
+                    Article = article,
+                    ProjectId = projectId.Value,
+                    ArticleId = article.Doi,
+                    IsApproved= false,
+                    IsDiscredited = false,
+                    DiscreditedReason = "",
+                    ApprovedById="",
+
+                };
+            })
+            .ToList();
     }
 
     private async Task Reload()
@@ -168,7 +518,15 @@
         State.PageNr++;
         await LoadPage(pageNr);
         StateHasChanged();
-        
+    }
+
+    public class AdditionalQueryParams
+    {
+        public string? Field { get; set; }
+        public int? RelDate { get; set; }
+        public DateTime? MinDate { get; set; }
+        public DateTime? MaxDate { get; set; }
+        public string? Sort { get; set; }
     }
 }
 

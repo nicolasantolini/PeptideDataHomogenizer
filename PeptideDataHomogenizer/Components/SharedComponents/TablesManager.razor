@@ -1,0 +1,177 @@
+﻿@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Entities
+@using System.Text
+@inject IJSRuntime JSRuntime
+
+@rendermode InteractiveServer
+
+<div class="table-viewer-container">
+    <div class="table-display-area">
+        @if (Tables == null || !Tables.Any())
+        {
+            <div class="no-tables-message">
+                <i class="fas fa-table"></i>
+                <p>No tables to display</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-tabs">
+                @foreach (var table in Tables.Select((t, i) => new { Table = t, Index = i }))
+                {
+                    <button class="@GetTabClass(table.Table)" @onclick="() => SetActiveTable(table.Table)">
+                        @($"Table {table.Index + 1}")
+                    </button>
+                }
+                
+            </div>
+
+            @if (ActiveTable != null)
+            {
+                <div class="table-wrapper">
+                    <div class="table-header">
+                        <h3>@ActiveTable.Caption</h3>
+                        <div class="table-meta">
+                            <span>@ActiveTable.Rows.Count rows</span>
+                            @if (ActiveTable.Rows.Any())
+                            {
+                                <span>@ActiveTable.Rows.First().Count columns</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="scrollable-table">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    @foreach (var column in GetColumns())
+                                    {
+                                        <th>@column</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in ActiveTable.Rows)
+                                {
+                                    <tr>
+                                        @foreach (var column in GetColumns())
+                                        {
+                                            <td>@(row.ContainsKey(column) ? row[column] : "-")</td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="action-sidebar">
+        <h4>Table Actions</h4>
+        <div class="action-list">
+            @foreach (var action in Actions)
+            {
+                <button class="action-button @action.AdditionalClass"
+                        @onclick="() => HandleAction(action.ActionName, ActiveTable)">
+                    @if (!string.IsNullOrEmpty(action.IconClass))
+                    {
+                        <i class="@action.IconClass"></i>
+                    }
+                    @action.Label
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<ExtractedTable> Tables { get; set; }
+
+    [Parameter]
+    public List<TableAction> Actions { get; set; } = new List<TableAction>
+    {
+        new TableAction { ActionName = "export", Label = "Export to CSV", IconClass = "fas fa-file-export" }
+    };
+
+    [Parameter]
+    public EventCallback<ActionEventArgs> OnAction { get; set; }
+
+    private ExtractedTable ActiveTable { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Tables != null && Tables.Any() && ActiveTable == null)
+        {
+            ActiveTable = Tables.First();
+        }
+    }
+
+    private IEnumerable<string> GetColumns()
+    {
+        return ActiveTable?.Rows.FirstOrDefault()?.Keys ?? Enumerable.Empty<string>();
+    }
+
+    private string GetTabClass(ExtractedTable table)
+    {
+        return table == ActiveTable ? "tab-button active" : "tab-button";
+    }
+
+    private void SetActiveTable(ExtractedTable table)
+    {
+        ActiveTable = table;
+    }
+
+    private async Task HandleAction(string actionName, ExtractedTable table)
+    {
+        if (actionName == "export" && table != null)
+        {
+            await ExportToCSV(table);
+        }
+        await OnAction.InvokeAsync(new ActionEventArgs
+        {
+            ActionName = actionName,
+            Table = table
+        });
+    }
+
+    private async Task ExportToCSV(ExtractedTable table)
+    {
+        // Transform protein data to CSV format
+        var csvData = new StringBuilder();
+        var columns = GetColumns().ToList();
+        csvData.AppendLine(string.Join(",", columns));
+        foreach (var row in table.Rows)
+        {
+            var values = columns.Select(col => row.ContainsKey(col) ? row[col] : string.Empty);
+            csvData.AppendLine(string.Join(",", values));
+        }
+
+        // Use JavaScript interop to download the CSV file
+        var csvContent = csvData.ToString();
+        var fileName = $"table_{Tables.IndexOf(table)}.csv";
+        var mimeType = "text/csv";
+
+        await JSRuntime.InvokeVoidAsync("downloadFileFromText", fileName, csvContent, mimeType);
+    }
+
+    public class TableAction
+    {
+        public string ActionName { get; set; }
+        public string Label { get; set; }
+        public string IconClass { get; set; }
+        public string AdditionalClass { get; set; }
+    }
+
+    public class ActionEventArgs
+    {
+        public string ActionName { get; set; }
+        public ExtractedTable Table { get; set; }
+    }
+}
+
+
+ 

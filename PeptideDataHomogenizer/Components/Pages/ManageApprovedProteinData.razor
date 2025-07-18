@@ -1,24 +1,51 @@
 ﻿@page "/protein-data"
 @using Entities
+@using Microsoft.AspNetCore.Identity
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
 @using SuperSimpleBlazorModal
 @using System.Reflection.Metadata
 @using System.Text
 @inject DatabaseDataHandler DatabaseDataHandler
+@inject ProteinDataService ProteinDataService
 @inject IJSRuntime JSRuntime
+
+@inject ProteinDataPerProjectService ProteinDataPerProjectService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject UserProjectService UserProjectService
+@inject ArticlePerProjectService ArticlePerProjectService
+@inject UserOrganizationService UserOrganizationService
+
 
 @rendermode InteractiveServer
 
 <h3 class="mb-4">Approved Protein Data</h3>
 
-<div class="card shadow-sm mb-4">
+@if (isRenderingPage)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+}
+else if(errorMessage != string.Empty)
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
+else{
+
+ <div class="card shadow-sm mb-4">
     <div class="card-header bg-light d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Protein Records</h5>
         <div class="d-flex flex-row flex-wrap align-items-center gap-2">
-            <button class="btn btn-sm btn-warning me-2" @onclick="OpenHomogenizeDataModal" title="Homogenize Conflicting Values">
+            <button class="btn btn-sm btn-warning me-2" @onclick="OpenHomogenizeDataModal"disabled="@(UserRole=="visitor")" title="Homogenize Conflicting Values">
                 <i class="fas fa-exchange-alt me-1"></i> Homogenize
             </button>
-            <button class="btn btn-sm btn-success me-2" @onclick="AddNewProtein">
+                <button class="btn btn-sm btn-success me-2" @onclick="AddNewProtein" disabled="@(UserRole == "visitor")">
                 <i class="fas fa-plus me-1"></i> Add Protein
             </button>
             <button class="btn btn-sm btn-secondary" @onclick="ExportToCSV">
@@ -98,6 +125,24 @@
                     }
                 </select>
             </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedResidue" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Residues</option>
+                    @foreach (var item in availableResidues)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm" @bind="selectedBinder" @bind:event="onchange" @bind:after="UpdateFilteredData">
+                    <option value="">All Binders</option>
+                    @foreach (var item in availableBinders)
+                    {
+                        <option value="@item">@item</option>
+                    }
+                    </select>
+            </div>
         </div>
 
         <!-- Data Table -->
@@ -109,13 +154,21 @@
                         <th>Classification</th>
                         <th>Software</th>
                         <th>Version</th>
+                        <th>Residue</th>
+                        <th>Binder</th>
                         <th>Water Model</th>
+                        <th>Water Model Type</th>
                         <th>Force Field</th>
                         <th>Method</th>
                         <th>Temp (K)</th>
                         <th>Ions</th>
                         <th>Ion Conc. (M)</th>
                         <th>Sim Length (ns)</th>
+                        <th>Kd (M)</th>
+                        <th>K<sub>off</sub> (s<sup>−1</sup>)</th>
+                        <th>K<sub>on</sub> (M<sup>−1</sup>s<sup>−1</sup>)</th>
+                        <th>Binding Energy (kcal/mol)</th>
+                        <th>Approved By</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -123,13 +176,13 @@
                     @if (filteredProteinData == null)
                     {
                         <tr>
-                            <td colspan="12" class="text-center">Loading data...</td>
+                            <td colspan="20" class="text-center">Loading data...</td>
                         </tr>
                     }
                     else if (!filteredProteinData.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center">No protein data found</td>
+                            <td colspan="20" class="text-center">No protein data found</td>
                         </tr>
                     }
                     else
@@ -141,16 +194,26 @@
                                 <td>@protein.Classification</td>
                                 <td>@protein.SoftwareName</td>
                                 <td>@protein.SoftwareVersion</td>
+                                <td>@protein.Residue</td>
+                                    <td>@protein.Binder</td>
                                 <td>@protein.WaterModel</td>
+                                <td>@protein.WaterModelType</td>
                                 <td>@protein.ForceField</td>
                                 <td>@protein.SimulationMethod</td>
                                 <td>@protein.Temperature</td>
                                 <td>@protein.Ions</td>
                                 <td>@protein.IonConcentration</td>
                                 <td>@protein.SimulationLength</td>
+                                <td>@protein.Kd</td>
+                                <td>@protein.KOff</td>
+                                <td>@protein.KOn</td>
+                                <td>@protein.FreeBindingEnergy</td>
+                                <td>@(protein.Article != null ? GetExtendedNameByUserId(protein.Article).Result : "N/A")</td>
                                 <td>
+                                    @if(protein.Article!=null){
                                     <button class="btn btn-sm btn-info" @onclick="() => OpenDoiInNewTab(protein.Article.Doi)">Open Article</button>
-                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveProtein(protein)">
+                                    }
+                                        <button class="btn btn-sm btn-danger" @onclick="() => RemoveProtein(protein)" disabled="@(UserRole == "visitor")">
                                         <i class="fas fa-trash"></i> Remove
                                     </button>
                                 </td>
@@ -161,8 +224,8 @@
             </table>
         </div>
     </div>
-</div>
-
+</div> 
+}
 
 <SimpleModal @ref="modal"
 Id="article-detail-modal"
@@ -176,12 +239,24 @@ OpenOnFirstRender="false">
     <div class="modal-body">
         <div class="row">
             <div class="col-md-6 mb-3">
-                <label class="form-label">Protein ID</label>
+                <label class="form-label">Protein ID (*)</label>
                 <input class="form-control" @bind="newProtein.ProteinId" />
             </div>
             <div class="col-md-6 mb-3">
                 <label class="form-label">Classification</label>
                 <input class="form-control" @bind="newProtein.Classification" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    Residue
+                </label>
+                <input class="form-control" @bind="newProtein.Residue" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    Binder
+                </label>
+                <input class="form-control" @bind="newProtein.Binder" />
             </div>
             <div class="col-md-6 mb-3">
                 <label class="form-label">Software Name</label>
@@ -194,6 +269,16 @@ OpenOnFirstRender="false">
             <div class="col-md-6 mb-3">
                 <label class="form-label">Water Model</label>
                 <input class="form-control" @bind="newProtein.WaterModel" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    Water Model Type
+                </label>
+                <InputSelect @bind-Value="newProtein.WaterModelType" class="form-select">
+                    <option disabled value="">Select Water Model Type</option>
+                    <option value="Explicit">Explicit</option>
+                    <option value="Implicit">Implicit</option>
+                </InputSelect>
             </div>
             <div class="col-md-6 mb-3">
                 <label class="form-label">Force Field</label>
@@ -219,20 +304,50 @@ OpenOnFirstRender="false">
                 <label class="form-label">Simulation Length (ns)</label>
                 <input type="number" class="form-control" @bind="newProtein.SimulationLength" />
             </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    K<sub>d</sub> (M)
+                </label>
+                <input type="number" class="form-control" @bind="newProtein.Kd" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    K<sub>off</sub> (M<sup>−1</sup>s<sup>−1</sup>)
+                </label>
+                <input type="number" class="form-control" @bind="newProtein.KOff" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    K<sub>on</sub> (s<sup>−1</sup>)
+                </label>
+                <input type="number" class="form-control" @bind="newProtein.KOn" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    Free Binding Energy (kcal/mol)
+                </label>
+                <input type="number" class="form-control" @bind="newProtein.FreeBindingEnergy" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">
+                    Article DOI
+                </label>
+                <input type="text" class="form-control" @bind="newProtein.Article.Doi" placeholder="Enter DOI (e.g., 10.1000/xyz123)" />
+            </div>
         </div>
     </div>
     <div class="modal-footer">
         <button type="button" class="btn btn-secondary" @onclick="()=>modal.CloseModal()">Cancel</button>
         <button type="button" class="btn btn-primary" @onclick="SaveProtein">Save</button>
     </div>
-</SimpleModal>
+</SimpleModal> 
 
 <SimpleModal @ref="homogenizeDataModal"
              Id="homogenize-data-modal"
              OpenOnFirstRender="false">
     <div class="modal-header">
         <h5 class="modal-title">Homogenize Protein Data</h5>
-        <button type="button" class="btn-close" @onclick="()=>homogenizeDataModal.CloseModal()" aria-label="Close"></button>
+        <button type="button" class="btn btn-close m-5" @onclick="()=>homogenizeDataModal.CloseModal()" aria-label="Close">Close</button>
     </div>
     <div class="modal-body">
         <p class="mb-3 text-muted">
@@ -309,7 +424,6 @@ OpenOnFirstRender="false">
             }
         </div>
     <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" @onclick="()=>homogenizeDataModal.CloseModal()">Close</button>
     </div>
 </SimpleModal>
 
@@ -507,12 +621,12 @@ OpenOnFirstRender="false">
     }
 
 }
-
+ 
 
 @code {
     private List<ProteinData> allProteinData = new();
     private List<ProteinData> filteredProteinData = new();
-    private ProteinData newProtein = new();
+    private ProteinData newProtein = new ProteinData();
 
     // Search and filter fields
     private string searchTerm = string.Empty;
@@ -522,6 +636,8 @@ OpenOnFirstRender="false">
     private string selectedForceField = string.Empty;
     private string selectedMethod = string.Empty;
     private string selectedIons = string.Empty;
+    private string selectedResidue = string.Empty;
+    private string selectedBinder = string.Empty;
 
     // Available filter options
     private List<string> availableClassifications = new();
@@ -530,24 +646,126 @@ OpenOnFirstRender="false">
     private List<string> availableForceFields = new();
     private List<string> availableMethods = new();
     private List<string> availableIons = new();
+    private List<string> availableResidues = new();
+    private List<string> availableBinders = new();
+
 
     private SimpleModal modal;
     private SimpleModal homogenizeDataModal;
 
-    protected override async Task OnInitializedAsync()
+    private int? currentProjectId = 0;
+    private ApplicationUser currentUser;
+
+    private bool isRenderingPage = true;
+
+    private string errorMessage = string.Empty;
+    private string UserRole = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadProteinData();
+        if (firstRender)
+        {
+            isRenderingPage = true;
+            currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (currentUser == null)
+            {
+                errorMessage = "User not found. Please log in.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            currentProjectId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+
+            if (currentProjectId.HasValue && currentProjectId.Value > 0)
+            {
+                await LoadProteinData();
+            }
+            else
+            {
+                errorMessage = "No project selected. Please select a project to view protein data.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            UserRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(currentProjectId.Value, currentUser.Id);
+
+            var roles = await UserManager.GetRolesAsync(currentUser);
+
+            if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+            {
+                UserRole = "admin";
+            }
+            int? currentOrganizationId = await ContextCookieManager.GetContextAsync(JSRuntime);
+            if (currentOrganizationId == null || currentOrganizationId < 1)
+            {
+                errorMessage = "No organization selected. Please select an organization to view protein data.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            var organizationRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(currentOrganizationId.Value, currentUser.Id);
+
+            if ((UserRole == null || UserRole == string.Empty) && organizationRole != null && organizationRole != string.Empty)
+            {
+                UserRole = "visitor";
+            }
+            if (UserRole == "")
+            {
+                errorMessage = "You do not have permission to view this project.";
+                isRenderingPage = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            isRenderingPage = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadProteinData()
     {
-        allProteinData = await DatabaseDataHandler.GetApprovedProteinDataAsync();
+        allProteinData = await ProteinDataPerProjectService.GetApprovedProteinDataByProjectIdAsync(currentProjectId.Value);
+
+        //print all protein data id's of the first 10 proteins
+        foreach(var protein in allProteinData.Take(10))
+        {
+            Console.WriteLine(protein.ProteinId);
+        }
         UpdateFilteredData();
         InitializeFilterOptions();
     }
 
+    private async Task<string> GetExtendedNameByUserId(Article article)
+    {
+        var articlePerProject = await ArticlePerProjectService.GetArticlePerProjectAsync(currentProjectId.Value, article.Doi);
+        ApplicationUser user;
+
+        string response = string.Empty;
+
+        if (articlePerProject != null && articlePerProject.ApprovedById != null)
+        {
+            user = await UserManager.FindByIdAsync(articlePerProject.ApprovedById);
+
+            if (user != null)
+            {
+                response += user?.FullName ?? "Unknown";
+                if (articlePerProject.DatetimeApproval.HasValue)
+                {
+                    response += " - " + articlePerProject.DatetimeApproval.Value.ToString("yyyy-MM-dd");
+                }
+            }
+        }
+        else
+        {
+            response = "N/A";
+        }
+        return response;
+    }
+
     private void InitializeFilterOptions()
     {
+        // Initialize filter options based on all protein data
         availableClassifications = allProteinData
             .Select(p => p.Classification)
             .Distinct()
@@ -583,6 +801,18 @@ OpenOnFirstRender="false">
             .Distinct()
             .OrderBy(i => i)
             .ToList();
+        availableResidues = allProteinData
+            .Select(p => p.Residue)
+            .Where(r => !string.IsNullOrEmpty(r))
+            .Distinct()
+            .OrderBy(r => r)
+            .ToList()!;
+        availableBinders = allProteinData
+            .Select(p => p.Binder)
+            .Where(b => !string.IsNullOrEmpty(b))
+            .Distinct()
+            .OrderBy(b => b)
+            .ToList()!;
     }
 
     private void UpdateFilteredData()
@@ -598,7 +828,9 @@ OpenOnFirstRender="false">
                 (p.WaterModel != null && p.WaterModel.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
                 (p.ForceField != null && p.ForceField.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
                 (p.SimulationMethod != null && p.SimulationMethod.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
-                (p.Ions != null && p.Ions.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)));
+                (p.Ions != null && p.Ions.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (p.Residue!=null && p.Residue.Contains(searchTerm,StringComparison.OrdinalIgnoreCase)) ||
+                (p.Binder != null && p.Binder.Contains(searchTerm,StringComparison.OrdinalIgnoreCase)));
         }
 
         if (!string.IsNullOrEmpty(selectedClassification))
@@ -618,6 +850,11 @@ OpenOnFirstRender="false">
 
         if (!string.IsNullOrEmpty(selectedIons))
             query = query.Where(p => p.Ions == selectedIons);
+        if (!string.IsNullOrEmpty(selectedResidue))
+            query = query.Where(p => p.Residue == selectedResidue);
+        if (!string.IsNullOrEmpty(selectedBinder))
+            query = query.Where(p => p.Binder == selectedBinder);
+
 
         filteredProteinData = query.ToList();
 
@@ -638,11 +875,15 @@ OpenOnFirstRender="false">
         selectedForceField = string.Empty;
         selectedMethod = string.Empty;
         selectedIons = string.Empty;
+        selectedResidue = string.Empty;
+        selectedBinder = string.Empty;
         UpdateFilteredData();
     }
 
     private async Task RemoveProtein(ProteinData protein)
     {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this protein entry?"))
+            return;
         await DatabaseDataHandler.DeleteAsync(protein);
         await LoadProteinData();
     }
@@ -650,11 +891,17 @@ OpenOnFirstRender="false">
     private async Task AddNewProtein()
     {
         newProtein = new ProteinData();
+        newProtein.Article = new Article();
         await modal.ShowModal();
     }
 
     private async Task SaveProtein()
     {
+        if (string.IsNullOrWhiteSpace(newProtein.ProteinId))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Protein ID is required.");
+            return;
+        }
         await DatabaseDataHandler.AddAsync(newProtein);
         await LoadProteinData();
         await modal.CloseModal();
@@ -666,10 +913,12 @@ OpenOnFirstRender="false">
         if (isOpen)
         {
             newProtein = new ProteinData();
+            newProtein.Article = new Article();
         }
         else
         {
             newProtein = new ProteinData();
+            newProtein.Article = new Article();
         }
 
     }
@@ -689,12 +938,12 @@ OpenOnFirstRender="false">
     {
         // Transform protein data to CSV format
         var csvData = new StringBuilder();
-        csvData.AppendLine("Protein ID,Classification,Software Name,Software Version,Water Model,Force Field,SimulationMethod,Temperature,Ions,Ion Concentration,Simulation Length");
+        csvData.AppendLine("Protein ID,Classification,Organism,Method,Residue,Software Name,Software Version,Water Model,Water Model Type,Force Field,Simulation Method,Temperature (K),Ions,Ion Concentration (M),Simulation Length (ns),Kd (M),KOff (M^-1 s^-1),KOn (s^-1),Free Binding Energy (kcal/mol),ProjectId,ArticleDoi,Approved");
         foreach (var protein in filteredProteinData)
         {
-            csvData.AppendLine($"{protein.ProteinId},{protein.Classification},{protein.SoftwareName},{protein.SoftwareVersion}," +
-                               $"{protein.WaterModel},{protein.ForceField},{protein.SimulationMethod},{protein.Temperature}," +
-                               $"{protein.Ions},{protein.IonConcentration},{protein.SimulationLength}");
+            var articleDoi = protein.Article?.Doi ?? string.Empty;
+            var approvedBy = protein.Article != null ? await GetExtendedNameByUserId(protein.Article) : "N/A";
+            csvData.AppendLine($"{protein.ProteinId},{protein.Classification},{protein.Organism},{protein.Method},{protein.Residue},{protein.SoftwareName},{protein.SoftwareVersion},{protein.WaterModel},{protein.WaterModelType},{protein.ForceField},{protein.SimulationMethod},{protein.Temperature},{protein.Ions},{protein.IonConcentration},{protein.SimulationLength},{protein.Kd},{protein.KOff},{protein.KOn},{protein.FreeBindingEnergy},{currentProjectId.Value},{articleDoi},{approvedBy}");
         }
 
         // Use JavaScript interop to download the CSV file

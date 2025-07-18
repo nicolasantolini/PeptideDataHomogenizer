@@ -1,0 +1,200 @@
+﻿@using Entities
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+@rendermode InteractiveServer
+
+<div class="mt-3">
+    <button class="btn btn-outline-secondary d-flex align-items-center"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#proteinDataDeleter"
+            aria-expanded="false"
+            aria-controls="proteinDataDeleter">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3 me-2" viewBox="0 0 16 16">
+            <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5ZM11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H2.506a.58.58 0 0 0-.01 0H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1h-.995a.59.59 0 0 0-.01 0H11Zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5h9.916Zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47ZM8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5Z" />
+        </svg>
+        Protein Data Bulk Deleter
+    </button>
+
+    <div class="collapse mt-3" id="proteinDataDeleter">
+        <div class="card card-body bg-light">
+            <div class="d-flex flex-column">
+                <h6 class="mb-3 text-primary">Delete records matching these criteria</h6>
+
+                <div class="row g-3">
+                    @foreach (var prop in proteinProperties)
+                    {
+                        <div class="col-md-4">
+                            <label class="form-label mb-1">@prop.Label</label>
+                            <select class="form-select" @bind="@prop.SelectedValue">
+                                <option value="">(Any)</option>
+                                @foreach (var value in prop.AvailableValues)
+                                {
+                                    <option value="@value">@value</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                </div>
+
+                <div class="mt-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        @if (showDeletePreview)
+                        {
+                            <div class="alert alert-warning py-2 mb-0">
+                                <strong>@recordsToDeleteCount</strong> records will be deleted
+                            </div>
+                        }
+                    </div>
+                    <div>
+                        <button class="btn btn-danger me-2" @onclick="PreviewDelete">
+                            <i class="bi bi-eye me-1"></i> Preview
+                        </button>
+                        <button class="btn btn-danger" @onclick="ExecuteDelete" disabled="@(recordsToDeleteCount == 0)">
+                            <i class="bi bi-trash me-1"></i> Delete
+                        </button>
+                    </div>
+                </div>
+
+                @if (showDeleteResult)
+                {
+                    <div class="mt-3 p-2 border rounded bg-light">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><strong>@deletedRecordsCount</strong> records were deleted</span>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => showDeleteResult = false">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Article Article { get; set; }
+
+    [Parameter]
+    public EventCallback<Article> ArticleChanged { get; set; }
+
+    private List<ProteinProperty> proteinProperties = new();
+    private bool showDeletePreview = false;
+    private bool showDeleteResult = false;
+    private int recordsToDeleteCount = 0;
+    private int deletedRecordsCount = 0;
+
+    protected override void OnInitialized()
+    {
+        InitializeProperties();
+    }
+
+    protected override void OnParametersSet()
+    {
+        RefreshAvailableValues();
+    }
+
+    private void InitializeProperties()
+    {
+        proteinProperties = new List<ProteinProperty>
+        {
+            new ProteinProperty { Label = "Protein ID", PropertyName = "ProteinId" },
+            new ProteinProperty { Label = "Software Name", PropertyName = "SoftwareName" },
+            new ProteinProperty { Label = "Software Version", PropertyName = "SoftwareVersion" },
+            new ProteinProperty { Label = "Water Model", PropertyName = "WaterModel" },
+            new ProteinProperty { Label = "Force Field", PropertyName = "ForceField" },
+            new ProteinProperty { Label = "Temperature (K)", PropertyName = "Temperature", IsNumeric = true },
+            new ProteinProperty { Label = "Ions", PropertyName = "Ions" },
+            new ProteinProperty { Label = "Ion Concentration (M)", PropertyName = "IonConcentration", IsNumeric = true },
+            new ProteinProperty { Label = "Simulation Length (ns)", PropertyName = "SimulationLength", IsNumeric = true },
+            new ProteinProperty { Label = "Residue", PropertyName = "Residue" }
+        };
+    }
+
+    private void RefreshAvailableValues()
+    {
+        if (Article?.ProteinData == null) return;
+
+        foreach (var prop in proteinProperties)
+        {
+            prop.AvailableValues = Article.ProteinData
+                .Select(p => GetPropertyValue(p, prop.PropertyName)?.ToString())
+                .Where(v => !string.IsNullOrEmpty(v))
+                .Distinct()
+                .OrderBy(v => v)
+                .ToList();
+        }
+    }
+
+    private async Task PreviewDelete()
+    {
+        if (Article?.ProteinData == null)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "No protein data available.");
+            return;
+        }
+
+        recordsToDeleteCount = GetMatchingRecords().Count;
+        showDeletePreview = true;
+        showDeleteResult = false;
+    }
+
+    private async Task ExecuteDelete()
+    {
+        if (recordsToDeleteCount == 0) return;
+
+        var matchingRecords = GetMatchingRecords();
+        deletedRecordsCount = matchingRecords.Count;
+
+        foreach (var record in matchingRecords.ToList())
+        {
+            Article.ProteinData.Remove(record);
+        }
+
+        showDeleteResult = true;
+        showDeletePreview = false;
+        recordsToDeleteCount = 0;
+
+        // Update available values after deletion
+        RefreshAvailableValues();
+
+        // Notify parent
+        await ArticleChanged.InvokeAsync(Article);
+
+        await JSRuntime.InvokeVoidAsync("alert", $"{deletedRecordsCount} records were successfully deleted.");
+    }
+
+    private List<ProteinData> GetMatchingRecords()
+    {
+        var selectedFilters = proteinProperties
+            .Where(p => !string.IsNullOrEmpty(p.SelectedValue))
+            .ToList();
+
+        if (!selectedFilters.Any())
+            return new List<ProteinData>();
+
+        return Article.ProteinData
+            .Where(p => selectedFilters.All(filter =>
+            {
+                var value = GetPropertyValue(p, filter.PropertyName)?.ToString();
+                return string.Equals(value, filter.SelectedValue, StringComparison.Ordinal);
+            }))
+            .ToList();
+    }
+
+    private object GetPropertyValue(ProteinData data, string propertyName)
+    {
+        return data.GetType().GetProperty(propertyName)?.GetValue(data);
+    }
+
+    private class ProteinProperty
+    {
+        public string Label { get; set; }
+        public string PropertyName { get; set; }
+        public bool IsNumeric { get; set; }
+        public List<string> AvailableValues { get; set; } = new();
+        public string SelectedValue { get; set; }
+    }
+}

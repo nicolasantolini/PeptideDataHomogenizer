@@ -1,0 +1,59 @@
+﻿<div class="missing-context-error">
+    <div class="error-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="12" fill="#F87171"/>
+            <path d="M12 7v5m0 4h.01" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+    </div>
+    <div class="error-message">
+        <h2 class="centered-title">Context Not Selected</h2>
+        <p>
+            Please select a context or organization to continue.<br />
+            This action is required to access this feature.
+        </p>
+    </div>
+</div>
+
+<style>
+.missing-context-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(135deg, #fef2f2 0%, #fca5a5 100%);
+    border: 1.5px solid #f87171;
+    border-radius: 1rem;
+    padding: 2rem 1.5rem;
+    margin: 2rem auto;
+    max-width: 400px;
+    box-shadow: 0 4px 24px 0 rgba(248, 113, 113, 0.15);
+    color: #991b1b;
+}
+
+.error-icon {
+    margin-bottom: 1rem;
+}
+
+.error-message{
+    justify-content:center;
+    text-align:center;
+}
+
+.error-message h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #b91c1c;
+}
+
+.centered-title {
+    text-align: center;
+    width: 100%;
+}
+
+.error-message p {
+    margin: 0;
+    font-size: 1rem;
+    color: #7f1d1d;
+    text-align: center;
+}
+</style>

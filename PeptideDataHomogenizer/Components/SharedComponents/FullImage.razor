@@ -1,0 +1,33 @@
+﻿@if (FullImageUrl != null && FullImageUrl.Value.imageData!=null && FullImageUrl.Value.imageData.Length>0)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.9);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-transparent border-0">
+                <div class="modal-header border-0">
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseFullImage"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img src="@FullImageUrl" class="img-fluid" style="max-height: 80vh;" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public (string contentType, byte[] imageData)? FullImageUrl { get; set; }
+
+
+    [Parameter]
+    public EventCallback OnCloseFullImage { get; set; }
+
+
+    private async Task CloseFullImage()
+    {
+        if (OnCloseFullImage.HasDelegate)
+        {
+            await OnCloseFullImage.InvokeAsync();
+        }
+    }
+}

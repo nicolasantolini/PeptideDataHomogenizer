@@ -1,12 +1,13 @@
 ﻿@using System.Linq
 @using Entities
 @using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+
+@inject ArticlePerProjectService ArticlePerProjectService
 
 @rendermode InteractiveServer
 
-<div class="discredited-articles-container">
     <div class="header-section mb-4">
-        <h3 class="text-danger">Discredited Articles</h3>
         <p class="text-muted">Articles that have been flagged as discredited with their reasons.</p>
 
         @if (Articles != null && Articles.Any())
@@ -23,7 +24,7 @@
         }
     </div>
 
-    @if (Articles != null && Articles.Any())
+    @if (Articles != null && Articles.Any() )
     {
         <div class="table-responsive">
             <table class="table table-striped table-hover">
@@ -39,7 +40,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var article in Articles.OrderByDescending(a => a.PublicationDate))
+                    @foreach (var article in Articles.Keys.OrderByDescending(a => a.PublicationDate))
                     {
                         var isExpanded = expandedReasons.Contains(article.Doi);
                         <tr class="discredited-row">
@@ -57,9 +58,9 @@
                             </td>
                             <td class="reason-cell">
                                 <div class="reason-content @(isExpanded ? "expanded" : "collapsed")">
-                                    @article.DiscreditedReason
+                                    @Articles[article].DiscreditedReason
                                 </div>
-                                @if (article.DiscreditedReason?.Length > 50)
+                                @if (Articles[article].DiscreditedReason.Length > 50)
                                 {
                                     <button class="btn btn-sm btn-link toggle-reason-btn"
                                             @onclick="() => ToggleReason(article.Doi)">
@@ -69,7 +70,7 @@
                             </td>
                             <td>
                                 <button class="btn btn-sm btn-outline-danger remove-btn"  
-                                        @onclick="async () => await RemoveArticle(article)">  
+                                        @onclick="async () => await RemoveArticle(article)" disabled="@(UserProjectRole=="visitor")">  
                                     <i class="fas fa-trash-alt"></i> Remove  
                                 </button>
                             </td>
@@ -79,7 +80,6 @@
             </table>
         </div>
     }
-</div>
 
 <style>
     .discredited-articles-container {
@@ -164,15 +164,15 @@
 
 @code {
     [Parameter]
-    public List<Article>? Articles { get; set; }
+    public Dictionary<Article,ArticlePerProject>? Articles { get; set; }
 
     [Parameter]
-    public DatabaseDataHandler DatabaseDataHandler { get; set; } = null!;
+    public string UserProjectRole { get; set; } = string.Empty;
 
     private async Task RemoveArticle(Article article)
     {
         if (article == null) return;
-        await DatabaseDataHandler.RecreditArticleAsync(article.Doi);
+        await ArticlePerProjectService.RecreditArticleInProjectAsync(Articles[article].ProjectId,article.Doi);
         Articles.Remove(article);
         StateHasChanged();
     }

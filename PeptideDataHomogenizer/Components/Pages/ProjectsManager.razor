@@ -1,0 +1,575 @@
+﻿@page "/projects"
+@using Entities
+@using Microsoft.AspNetCore.Identity
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
+@inject DatabaseDataHandler DataHandler
+@inject ProjectService ProjectService
+@inject IWebHostEnvironment Environment
+@inject IJSRuntime JSRuntime
+@inject UserOrganizationService UserOrganizationService
+@inject UserProjectService UserProjectService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@implements IDisposable
+                                    
+@rendermode InteractiveServer
+
+<h3 class="mb-4">Manage Projects</h3>
+
+@if (isRenderingPage)
+{
+<div class="loading-progress">
+    <div class="spinner"></div>
+    <p>Loading...</p>
+</div>
+}
+else if (OrganizationId == null)
+{
+    <PeptideDataHomogenizer.Components.SharedComponents.MissingContextError></PeptideDataHomogenizer.Components.SharedComponents.MissingContextError>
+}
+else{
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        @if (IsOrgEditor())
+        {
+            <button @onclick="ShowAddModal" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Add Project
+            </button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(StatusMessage))
+    {
+        <div class="alert @StatusMessageClass alert-dismissible fade show" role="alert">
+            @StatusMessage
+            <button type="button" class="btn-close" @onclick="ClearStatusMessage"></button>
+        </div>
+    }
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="input-group">
+                <input type="text" @bind="SearchTerm" @bind:event="oninput" class="form-control" placeholder="Search projects..." />
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Logo</th>
+                            <th>Name</th>
+                            <th>Actions</th>
+                            
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var project in FilteredProjects)
+                        {
+                                <tr>
+                                    <td>
+                                        @if (project.LogoData != null && project.LogoData.Length > 0)
+                                        {
+                                            <img src="data:@project.ContentType;base64,@(Convert.ToBase64String(project.LogoData))" class="rounded-circle border"
+                                            style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                            @onclick="() => ShowFullImage((project.ContentType, project.LogoData))" />
+                                    }
+                                    else
+                                    {
+                                        <div class="rounded-circle border bg-light d-flex justify-content-center align-items-center"
+                                                style="width: 60px; height: 60px;">
+                                            <i class="bi bi-folder text-secondary"></i>
+                                        </div>
+                                    }
+                                </td>
+                                <td>@project.Name</td>
+                                    <td>
+                                        <div class="d-flex gap-2">
+                                                <button @onclick="() => ShowEditModal(project)" class="btn btn-sm btn-outline-primary">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                
+                                            @if (IsOrgAdmin() || IsProjectAdmin(project.Id).Result)
+                                            {
+                                                <button @onclick="() => ShowDeleteModal(project)" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+@if(ShowModal){
+<!-- Add/Edit Modal -->
+<div class="modal @(ShowModal ? "show d-block" : "")" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">@(CurrentProject.Id == 0 ? "Add Project" : "Edit Project")</h5>
+                <button type="button" class="btn-close" @onclick="CloseModal"></button>
+            </div>
+            <div class="modal-body">
+                <EditForm Model="CurrentProject">
+                    <DataAnnotationsValidator />
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Name (*)</label>
+                                    <InputText id="name" @bind-Value="CurrentProject.Name" class="form-control" disabled="@(!IsOrgEditor() && !IsProjectAdmin(CurrentProject.Id).Result)" />
+                                <ValidationMessage For="@(() => CurrentProject.Name)" />
+                            </div>
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                    <InputTextArea id="description" @bind-Value="CurrentProject.Description" class="form-control" rows="3" disabled="@(!IsOrgEditor() && !IsProjectAdmin(CurrentProject.Id).Result)" />
+                                <ValidationMessage For="@(() => CurrentProject.Description)" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Project Logo</label>
+                                <div class="border rounded p-3 text-center">
+                                    <div class="mb-3 d-flex justify-content-center">
+                                        @if (!string.IsNullOrEmpty(LogoPreviewUrl))
+                                        {
+                                            <img src="@LogoPreviewUrl" class="rounded-circle border"
+                                                    style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                    @onclick="() => ShowFullImage(LogoPreviewUrl)" />
+                                        }
+                                        else if (CurrentProject.LogoData != null && CurrentProject.LogoData.Length > 0)
+                                        {
+                                            <img src="data:@CurrentProject.ContentType;base64,@(Convert.ToBase64String(CurrentProject.LogoData))" class="rounded-circle border"
+                                                    style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                    @onclick="() => ShowFullImage((CurrentProject.ContentType, CurrentProject.LogoData))" />
+                                        }
+                                        else
+                                        {
+                                            <div class="rounded-circle border d-flex justify-content-center align-items-center"
+                                                    style="width: 150px; height: 150px; background-color: #f8f9fa;">
+                                                <i class="bi bi-folder text-secondary" style="font-size: 3rem;"></i>
+                                            </div>
+                                        }
+                                    </div>
+                                        @if (IsOrgEditor() || IsProjectAdmin(CurrentProject.Id).Result)
+                                    {
+                                        <InputFile OnChange="HandleLogoChangeAsync" class="form-control" accept="image/*" />
+                                        <div class="form-text">Max size: 10MB. All image types accepted.</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                                <div class="col-md-12">
+                                    @if (CurrentProject.Id != 0)
+                                    {
+                                        <PeptideDataHomogenizer.Components.SharedComponents.ProjectUsersManager CurrentProject="@CurrentProject" UserRole="@(IsProjectAdmin(CurrentProject.Id).Result ? "admin" : "visitor")"></PeptideDataHomogenizer.Components.SharedComponents.ProjectUsersManager>
+                                    }
+                                </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                            @if ((IsOrgEditor() || IsProjectAdmin(CurrentProject.Id).Result))
+                        {
+                            <button type="button" class="btn btn-primary" @onclick="HandleValidSubmit">
+                                @(CurrentProject.Id == 0 ? "Create" : "Update")
+                            </button>
+                        }
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (ShowDeleteConfirmation){
+<div class="modal @(ShowDeleteConfirmation ? "show d-block" : "")" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" @onclick="CloseDeleteModal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete project <strong>@ProjectToDelete?.Name</strong>?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseDeleteModal">Cancel</button>
+                <button type="button" class="btn btn-danger" @onclick="ConfirmDelete">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+}
+
+
+@if (FullImageUrl != null && FullImageUrl.Value.imageData != null && FullImageUrl.Value.imageData.Length > 0){
+    <PeptideDataHomogenizer.Components.SharedComponents.FullImage FullImageUrl="@FullImageUrl" OnCloseFullImage="CloseFullImage"></PeptideDataHomogenizer.Components.SharedComponents.FullImage>
+}
+@code {
+    private List<Project> Projects = new();
+    private List<Project> FilteredProjects => Projects
+        .Where(p => string.IsNullOrEmpty(SearchTerm) ||
+                    p.Name.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(p => p.Name)
+        .ToList();
+
+    private string SearchTerm = string.Empty;
+    private bool ShowModal = false;
+    private bool ShowDeleteConfirmation = false;
+    private Project CurrentProject = new();
+    private Project? ProjectToDelete;
+    private string StatusMessage = string.Empty;
+    private string StatusMessageClass = "alert-success";
+    private IBrowserFile? LogoFile;
+    private string? LogoPreviewUrl;
+    private (string contentType, byte[] imageData)? FullImageUrl;
+
+    private int? OrganizationId;
+
+    private ApplicationUser currentUser;
+    private bool isRenderingPage = true;
+
+
+
+    private string UserOrganizationRole = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            isRenderingPage = true;
+            Console.WriteLine("OnAfterRenderAsync: firstRender = true");
+            var user = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+            if (user == null)
+            {
+                Console.WriteLine("OnAfterRenderAsync: user is null");
+                SetStatusMessage("You must be logged in to access this page.", false);
+                isRenderingPage = false;
+                return;
+            }
+
+            var roles = await UserManager.GetRolesAsync(user);
+            Console.WriteLine($"OnAfterRenderAsync: user roles = {string.Join(",", roles)}");
+
+            var organizations = await UserOrganizationService.GetOrganizationsByUserIdAsync(user.Id);
+            OrganizationId = await ContextCookieManager.GetContextAsync(JSRuntime);
+
+            // Ensure organizationId is valid and user has access
+            if (organizations.Any() && (!organizations.Any(o => o.Id == OrganizationId) || OrganizationId < 1))
+            {
+                var firstOrgId = organizations.First().Id;
+                Console.WriteLine($"OnAfterRenderAsync: setting organizationId to firstOrgId = {firstOrgId}");
+                await ContextCookieManager.SetContextAsync(JSRuntime, firstOrgId);
+                OrganizationId = firstOrgId;
+            }
+
+            if (OrganizationId == null || OrganizationId < 1 || (!organizations.Any(o => o.Id == OrganizationId) && !roles.Contains("Admin") && !roles.Contains("SuperAdmin")))
+            {
+                Console.WriteLine("OnAfterRenderAsync: invalid organizationId");
+                SetStatusMessage("Please select a valid organization from the context header.", false);
+                await ContextCookieManager.SetContextAsync(JSRuntime, 0);
+                await ProjectCookieManager.SetProjectAsync(JSRuntime, 0);
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            UserOrganizationRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(OrganizationId.Value, user.Id);
+
+            if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+            {
+                Console.WriteLine("OnAfterRenderAsync: user is Admin or SuperAdmin, setting UserRole to admin");
+                UserOrganizationRole = "admin";
+            }
+            await LoadProjects();
+
+            isRenderingPage = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProjects()
+    {
+        Projects = await ProjectService.GetProjectsByOrganizationIdAsync(OrganizationId.Value);
+        currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+        UserOrganizationRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(OrganizationId.Value, currentUser.Id);
+        Console.WriteLine($"User Organization Role: {UserOrganizationRole}");
+        var roles = await UserManager.GetRolesAsync(currentUser);
+
+        if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+            UserOrganizationRole = "admin";
+
+        Console.WriteLine($"User Organization Role after check: {UserOrganizationRole}");
+
+        StateHasChanged();
+    }
+
+    private void ShowAddModal()
+    {
+        if(UserOrganizationRole == "visitor" || UserOrganizationRole == string.Empty)
+        {
+            SetStatusMessage("You don't have permission to add projects.", false);
+            return;
+        }
+
+        CurrentProject = new Project { OrganizationId = OrganizationId.Value };
+        LogoFile = null;
+        LogoPreviewUrl = null;
+        ShowModal = true;
+    }
+
+    private async Task ShowEditModal(Project project)
+    {
+        CurrentProject = new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Description = project.Description,
+            LogoData = project.LogoData,
+            ContentType = project.ContentType,
+            OrganizationId = project.OrganizationId
+        };
+        LogoFile = null;
+        LogoPreviewUrl = null;
+
+        ShowModal = true;
+    }
+
+    private void CloseModal()
+    {
+        ShowModal = false;
+    }
+
+    private async Task ShowDeleteModal(Project project)
+    {
+        if (!IsOrgAdmin() && !await IsProjectAdmin(project.Id)) return;
+
+        ProjectToDelete = project;
+        ShowDeleteConfirmation = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        ShowDeleteConfirmation = false;
+        ProjectToDelete = null;
+    }
+
+    private void ShowFullImage((string contentType, byte[] imageData) image)
+    {
+        FullImageUrl = image;
+    }
+
+    private void ShowFullImage(string imageSrcString)
+    {
+        FullImageUrl = (contentType: "image/png", imageData: Convert.FromBase64String(imageSrcString));
+    }
+
+    private void CloseFullImage()
+    {
+        FullImageUrl = null;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            if(string.IsNullOrWhiteSpace(CurrentProject.Name))
+            {
+                SetStatusMessage("Project name is required.", false);
+                return;
+            }
+            // Check permissions
+            if (!IsOrgAdmin() && !IsOrgEditor() && !await IsProjectAdmin(CurrentProject.Id)) 
+            {
+                SetStatusMessage("You don't have permission to perform this action.", false);
+                return;
+            }
+
+            if (CurrentProject.Id == 0)
+            {
+                CurrentProject = await ProjectService.GetProjectMatchAsync(CurrentProject.OrganizationId, CurrentProject.Name, CurrentProject.Description);
+                if(CurrentProject != null)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert","A project with the same name and description already exists.");
+                    return;
+                }
+                await DataHandler.AddAsync(CurrentProject);
+                CurrentProject = await ProjectService.GetProjectMatchAsync(CurrentProject.OrganizationId, CurrentProject.Name, CurrentProject.Description);
+                // if (LogoFile != null)
+                // {
+                //     await SaveLogo();
+                // }
+
+                if (currentUser != null)
+                {
+                    await UserProjectService.AddUserToProjectAsync(currentUser.Id, CurrentProject.Id, "admin");
+
+                }
+                SetStatusMessage("Project created successfully!", true);
+            }
+            else
+            {
+                await DataHandler.UpdateAsync(CurrentProject);
+                if (LogoFile != null)
+                {
+                    await SaveLogo();
+                }
+                SetStatusMessage("Project updated successfully!", true);
+            }
+
+            await LoadProjects();
+            CloseModal();
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Error: {ex.Message}", false);
+        }
+    }
+
+    private async Task SaveLogo()
+    {
+        // var uploadsFolder = Path.Combine(Environment.WebRootPath, "project_logos");
+        // if (!Directory.Exists(uploadsFolder))
+        // {
+        //     Directory.CreateDirectory(uploadsFolder);
+        // }
+
+        // var uniqueFileName = Guid.NewGuid().ToString();
+        // //append the file extension from the original file
+        // var fileExtension = Path.GetExtension(LogoFile.Name);
+        // if (string.IsNullOrEmpty(fileExtension))
+        // {
+        //     fileExtension = ".png"; // Default to PNG if no extension is provided
+        // }
+        // uniqueFileName += fileExtension;
+        // var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+        // using (var fileStream = new FileStream(filePath, FileMode.Create))
+        // {
+        //     await LogoFile.OpenReadStream().CopyToAsync(fileStream);
+        // }
+
+        // CurrentProject.LogoPath = $"/project_logos/{uniqueFileName}";
+
+        var format = "image/png";
+        var resizedImage = await LogoFile.RequestImageFileAsync(format, 300, 300);
+        var buffer = new byte[resizedImage.Size];
+        await resizedImage.OpenReadStream().ReadAsync(buffer);
+
+        CurrentProject.ContentType = format;
+        CurrentProject.LogoData = buffer;
+
+        await DataHandler.UpdateAsync(CurrentProject);
+    }
+
+    private async Task ConfirmDelete()
+    {
+         
+        if (ProjectToDelete != null)
+        {
+            try
+            {
+                if (!IsOrgAdmin() && !IsOrgEditor() && !await IsProjectAdmin(ProjectToDelete.Id))
+                {
+                    SetStatusMessage("Only administrators can delete projects.", false);
+                    CloseDeleteModal();
+                    return;
+                }
+
+                await DataHandler.DeleteAsync(ProjectToDelete);
+                SetStatusMessage("Project deleted successfully!", true);
+                await LoadProjects();
+            }
+            catch (Exception ex)
+            {
+                SetStatusMessage($"Error: {ex.Message}", false);
+            }
+        }
+        CloseDeleteModal();
+    }
+
+    private async Task HandleLogoChangeAsync(InputFileChangeEventArgs e)
+    {
+        LogoFile = e.File;
+        var format = "image/png";
+        var resizedImage = await e.File.RequestImageFileAsync(format, 300, 300);
+        var buffer = new byte[resizedImage.Size];
+        await resizedImage.OpenReadStream().ReadAsync(buffer);
+        LogoPreviewUrl = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
+    }
+
+    private void SetStatusMessage(string message, bool isSuccess)
+    {
+        StatusMessage = message;
+        StatusMessageClass = isSuccess ? "alert-success" : "alert-danger";
+    }
+
+    private void ClearStatusMessage()
+    {
+        StatusMessage = string.Empty;
+    }
+
+    // Permission helper methods
+    private bool IsOrgAdmin()
+    {
+        return UserOrganizationRole == "admin";
+    }
+
+    private bool IsOrgEditor()
+    {
+        return UserOrganizationRole == "editor" || UserOrganizationRole == "admin";
+    }
+
+    private async Task<bool> IsProjectAdmin(int projectId)
+    {
+        var projectRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(projectId, currentUser.Id);
+        return projectRole == "admin";
+    }
+
+    //isprojecteditor
+    private async Task<bool> IsProjectEditor(int projectId)
+    {
+        var projectRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(projectId, currentUser.Id);
+        return projectRole == "editor";
+    }
+
+    //isprojectvisitor
+    private async Task<bool> IsProjectVisitor(int projectId)
+    {
+        var projectRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(projectId, currentUser.Id);
+        return projectRole == "visitor";
+    }
+
+    private async Task<bool> CanEditProject(Project project)
+    {
+        if (IsOrgAdmin()) return true;
+        if (UserOrganizationRole == "visitor") return false;
+            
+        // Editors can only edit projects where they are project admin
+        return await IsProjectAdmin(project.Id);
+    }
+
+    public void Dispose()
+    {
+        // Clean up if needed
+    }
+}

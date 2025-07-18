@@ -1,0 +1,383 @@
+﻿@page "/manage-project"
+@using Entities
+@using Microsoft.AspNetCore.Identity
+@using PeptideDataHomogenizer.Components.Account.Shared
+@using PeptideDataHomogenizer.Components.SharedComponents
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+@using PeptideDataHomogenizer.State
+@attribute [Authorize]
+@inject ProjectService ProjectService
+@inject UserProjectService UserProjectService
+@inject IJSRuntime JSRuntime
+@inject DatabaseDataHandler DatabaseDataHandler
+@inject IWebHostEnvironment Environment
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager NavigationManager
+
+@implements IDisposable
+@rendermode InteractiveServer
+
+<h1 class="mt-4">
+    <i class="bi bi-building-gear me-2"></i>Manage Project
+</h1>
+
+@if (isRenderingPage)
+{
+    <div class="loading-progress">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+}
+else if (errorMessage != string.Empty)
+{
+    <div class="container-fluid">
+        <div class="alert alert-danger mt-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i> @errorMessage
+        </div>
+    </div>
+}
+else
+{
+
+    <div class="container-fluid px-4">
+        @if (CurrentProject == null)
+        {
+            <div class="d-flex justify-content-center align-items-center" style="height: 80vh;">
+                <div class="text-center">
+                    <i class="bi bi-building-slash" style="font-size: 3rem; color: #6c757d;"></i>
+                    <h3 class="mt-3">No Project Selected</h3>
+                    <p class="text-muted">Please select a project from the header of the page to manage it.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                
+                <div class="d-flex gap-2">
+                    <button @onclick="() => ShowFullImage((CurrentProject.ContentType, CurrentProject.LogoData))"
+                            class="btn btn-outline-secondary"
+                            disabled="@(CurrentProject.LogoData!=null && CurrentProject.LogoData.Length>0)">
+                        <i class="bi bi-image"></i> View Logo
+                    </button>
+                </div>
+                <div class="d-flex gap-2">
+                    <button @onclick="() => LeaveProject(CurrentProject.Id)"
+                            class="btn btn-danger">
+                        <i class="bi bi-image"></i> LeaveProject
+                    </button>
+                </div>
+                @code{
+            private async Task LeaveProject(int projectId)
+            {
+                //js confirm
+                var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to leave this project?");
+                if (!confirmed)
+                    return;
+                await UserProjectService.RemoveUserFromProjectAsync(user.Id, projectId);
+                await ProjectCookieManager.SetProjectAsync(JSRuntime,0);
+                SetStatusMessage("You have successfully left the project.", true);
+                // Redirect to the projects page
+                NavigationManager.NavigateTo("/");
+
+            }
+                }
+            </div>
+
+            @if (!string.IsNullOrEmpty(StatusMessage))
+            {
+                <div class="alert @StatusMessageClass alert-dismissible fade show" role="alert">
+                    @StatusMessage
+                    <button type="button" class="btn-close" @onclick="ClearStatusMessage"></button>
+                </div>
+            }
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    @if (UserRole == "admin")
+                    {
+                        <EditForm Model="@CurrentProject">
+                            <DataAnnotationsValidator />
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="name" class="form-label">Project Name</label>
+                                        <InputText id="name" @bind-Value="CurrentProject.Name" class="form-control" />
+                                        <ValidationMessage For="@(() => CurrentProject.Name)" />
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="description" class="form-label">Description</label>
+                                        <InputTextArea id="description" @bind-Value="CurrentProject.Description"
+                                                       class="form-control" rows="5" />
+                                        <ValidationMessage For="@(() => CurrentProject.Description)" />
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">Project Logo</label>
+                                        <div class="border rounded p-3 text-center">
+                                            <div class="mb-3 d-flex justify-content-center">
+                                                @if (!string.IsNullOrEmpty(LogoPreviewUrl))
+                                                {
+                                                    <img src="@LogoPreviewUrl" class="rounded-circle border"
+                                                         style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                         @onclick="() => ShowFullImage(LogoPreviewUrl)" />
+                                                }
+                                                else if (CurrentProject.LogoData != null && CurrentProject.LogoData.Length > 0)
+                                                {
+                                                    <img src="data:@CurrentProject.ContentType;base64,@(Convert.ToBase64String(CurrentProject.LogoData))" class="rounded-circle border"
+                                                            style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                            @onclick="() => ShowFullImage((CurrentProject.ContentType, CurrentProject.LogoData))" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="rounded-circle border d-flex justify-content-center align-items-center"
+                                                         style="width: 150px; height: 150px; background-color: #f8f9fa;">
+                                                        <i class="bi bi-building text-secondary" style="font-size: 3rem;"></i>
+                                                    </div>
+                                                }
+                                            </div>
+                                            <InputFile OnChange="HandleLogoChangeAsync" class="form-control" accept="image/*" />
+                                            <div class="form-text">Max size: 10MB. Recommended: 300x300px square image</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4">
+                                <h5><i class="bi bi-people me-2"></i>Project Members</h5>
+                                <ProjectUsersManager CurrentProject="CurrentProject" UserRole="@UserRole" />
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <button type="button" class="btn btn-outline-secondary" @onclick="ResetForm">
+                                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                                </button>
+                                <button type="button" @onclick="HandleValidSubmit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </EditForm>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Project Name</label>
+                                    <div class="form-control-plaintext">@CurrentProject.Name</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Description</label>
+                                    <div class="form-control-plaintext">@CurrentProject.Description</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Project Logo</label>
+                                    <div class="border rounded p-3 text-center">
+                                        <div class="mb-3 d-flex justify-content-center">
+                                            @if (!string.IsNullOrEmpty(LogoPreviewUrl))
+                                            {
+                                                <img src="@LogoPreviewUrl" class="rounded-circle border"
+                                                     style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                     @onclick="() => ShowFullImage(LogoPreviewUrl)" />
+                                            }
+                                            else if (CurrentProject.LogoData != null && CurrentProject.LogoData.Length > 0)
+                                            {
+                                                <img src="data:@CurrentProject.ContentType;base64,@(Convert.ToBase64String(CurrentProject.LogoData))" class="rounded-circle border"
+                                                     style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                                     @onclick="() => ShowFullImage((CurrentProject.ContentType, CurrentProject.LogoData))" />
+                                            }
+                                            else
+                                            {
+                                                <div class="rounded-circle border d-flex justify-content-center align-items-center"
+                                                     style="width: 150px; height: 150px; background-color: #f8f9fa;">
+                                                    <i class="bi bi-building text-secondary" style="font-size: 3rem;"></i>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <h5><i class="bi bi-people me-2"></i>Project Members</h5>
+                            <ProjectUsersManager CurrentProject="@CurrentProject" UserRole="@UserRole" />
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+<FullImage FullImageUrl="@FullImageUrl" OnCloseFullImage="CloseFullImage" />
+
+@code {
+    private Project? CurrentProject;
+    private string StatusMessage = string.Empty;
+    private string StatusMessageClass = "alert-success";
+    private IBrowserFile? LogoFile;
+    private string? LogoPreviewUrl;
+    private (string contentType,byte[] imageData)? FullImageUrl;
+    private Project? OriginalProjectState;
+
+    private string errorMessage = string.Empty;
+    private bool isRenderingPage = true;
+
+    private string UserRole = "";
+
+    private ApplicationUser user;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            isRenderingPage = true;
+            var currentProjectContextId = await ProjectCookieManager.GetProjectAsync(JSRuntime);
+            if (currentProjectContextId.HasValue && currentProjectContextId>0)
+            {
+                CurrentProject = await DatabaseDataHandler.GetByIdAsync<Project>(currentProjectContextId.Value);
+                if(CurrentProject == null)
+                {
+                    errorMessage = "Project not found. Please select a valid project.";
+                    isRenderingPage = false;
+                    StateHasChanged();
+                    return;
+                }
+                OriginalProjectState = CloneProject(CurrentProject);
+                user = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
+
+                UserRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(currentProjectContextId.Value, user.Id);
+                var roles = await UserManager.GetRolesAsync(user);
+
+                if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
+                    UserRole = "admin";
+
+                if (UserRole == string.Empty)
+                {
+                    errorMessage = "You do not have permission to manage this project.";
+                }
+                else
+                {
+                    errorMessage = string.Empty;
+                }
+
+                StateHasChanged();
+            }
+            else
+            {
+                errorMessage = "No project context selected. Please select a project from the header.";
+                isRenderingPage = false;
+                StateHasChanged();
+                return;
+            }
+
+            isRenderingPage = false;
+            StateHasChanged();
+        }
+    }
+
+
+    private Project CloneProject(Project project)
+    {
+        return new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Description = project.Description,
+            LogoData = project.LogoData,
+            ContentType = project.ContentType,
+            OrganizationId = project.OrganizationId
+        };
+    }
+
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            if (UserRole != "admin")
+            {
+                SetStatusMessage("You do not have permission to update the project.", false);
+                return;
+            }
+            await ProjectService.UpdateProjectAsync(CurrentProject!);
+            SetStatusMessage("Project updated successfully!", true);
+            OriginalProjectState = CloneProject(CurrentProject!);
+            LogoFile = null;
+            LogoPreviewUrl = null;
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Error: {ex.Message}", false);
+        }
+    }
+
+    private void ResetForm()
+    {
+        if (UserRole != "admin")
+        {
+            SetStatusMessage("You do not have permission to reset changes.", false);
+            return;
+        }
+        if (OriginalProjectState != null)
+        {
+            CurrentProject = CloneProject(OriginalProjectState);
+            LogoFile = null;
+            LogoPreviewUrl = null;
+            SetStatusMessage("Changes discarded", false);
+        }
+    }
+
+    private async Task HandleLogoChangeAsync(InputFileChangeEventArgs e)
+    {
+        if (UserRole != "admin")
+        {
+            SetStatusMessage("You do not have permission to change the logo.", false);
+            return;
+        }
+        LogoFile = e.File;
+        var format = "image/png";
+        var resizedImage = await e.File.RequestImageFileAsync(format, 300, 300);
+        var buffer = new byte[resizedImage.Size];
+        await resizedImage.OpenReadStream().ReadAsync(buffer);
+        LogoPreviewUrl = $"data:{format};base64,{Convert.ToBase64String(buffer)}";
+
+        CurrentProject.ContentType = format;
+        CurrentProject.LogoData = buffer;
+    }
+
+    private void ShowFullImage((string contentType, byte[] imageData) image)
+    {
+        FullImageUrl = image;
+    }
+
+    private void ShowFullImage(string imageSrcString)
+    {
+        FullImageUrl = (contentType: "image/png", imageData: Convert.FromBase64String(imageSrcString));
+    }
+
+    private void CloseFullImage()
+    {
+        FullImageUrl = null;
+    }
+
+    private void SetStatusMessage(string message, bool isSuccess)
+    {
+        StatusMessage = message;
+        StatusMessageClass = isSuccess ? "alert-success" : "alert-danger";
+    }
+
+    private void ClearStatusMessage()
+    {
+        StatusMessage = string.Empty;
+    }
+
+    public void Dispose()
+    {
+        // Clean up if needed
+    }
+}

@@ -1,4 +1,6 @@
-﻿using System.Xml.Linq;
+﻿using Entities;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using System.Xml.Linq;
 
 namespace PeptideDataHomogenizer.Tools.ElsevierTools
 {
@@ -39,11 +41,14 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
         }
 
         public List<Section> Sections { get; } = new List<Section>();
+        public List<ExtractedTable> Tables { get; } = new List<ExtractedTable>();
+        public List<ImageHolder> Images { get; } = new List<ImageHolder>();
 
         private static readonly XNamespace CeNs = "http://www.elsevier.com/xml/common/dtd";
         private static readonly XNamespace XocsNs = "http://www.elsevier.com/xml/xocs/dtd";
         private static readonly XNamespace JaNs = "http://www.elsevier.com/xml/ja/dtd";
         private static readonly XNamespace SvapiNS = "http://www.elsevier.com/xml/svapi/article/dtd";
+        private static readonly XNamespace CalsNs = "http://www.elsevier.com/xml/common/cals/dtd";
 
         public static ElsevierArticleXMLConverter ParseArticleBody(string xmlContent)
         {
@@ -94,6 +99,8 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
                                     {
                                         Console.WriteLine("No 'body' element found in the XML.");
                                     }
+                                    ProcessTables(article, converter);
+                                    ProcessImages(article, converter);
                                 }
                                 else
                                 {
@@ -126,6 +133,225 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
             }
 
             return converter;
+        }
+
+        private static void ProcessImages(XElement articleElement, ElsevierArticleXMLConverter converter)
+        {
+            var floats = articleElement.Descendants(CeNs + "floats").FirstOrDefault();
+            if (floats == null) return;
+
+            var figures = floats.Descendants(CeNs + "figure");
+            foreach (var figure in figures)
+            {
+                var caption = figure.Element(CeNs + "caption")?.Value ?? string.Empty;
+                var link = figure.Element(CeNs + "link");
+                var href = link?.Attribute(XNamespace.Get("http://www.w3.org/1999/xlink") + "href")?.Value;
+
+                if (!string.IsNullOrEmpty(href))
+                {
+                    // Extract pii and ref from href (format: "pii:S0045206825003694/gr1")
+                    var parts = href.Split('/');
+                    if (parts.Length == 2)
+                    {
+                        var pii = parts[0].Replace("pii:", "");
+                        var refId = parts[1];
+                        var imageUrl = $"https://api.elsevier.com/content/object/pii/{pii}/ref/{refId}/high";
+
+                        converter.Images.Add(new ImageHolder
+                        {
+                            Caption = caption,
+                            FileName = imageUrl // Store URL for later download
+                        });
+                    }
+                }
+            }
+        }
+
+        private static void ProcessTables(XElement articleElement, ElsevierArticleXMLConverter converter)
+        {
+            Console.WriteLine("Entering ProcessTables...");
+            var floats = articleElement.Descendants(CeNs + "floats").FirstOrDefault();
+            if (floats == null)
+            {
+                Console.WriteLine("No <ce:floats> element found.");
+                return;
+            }
+
+            var tables = floats.Descendants(CeNs + "table").ToList();
+            Console.WriteLine($"Found {tables.Count} <ce:table> elements.");
+
+            foreach (var table in tables)
+            {
+                Console.WriteLine("Processing a <ce:table> element...");
+
+                var captionElement = table.Element(CeNs + "caption");
+                Console.WriteLine(captionElement != null ? "Found <ce:caption> in table." : "No <ce:caption> in table.");
+
+                var newTable = new ExtractedTable
+                {
+                    Caption = captionElement != null ? ExtractCaption(captionElement) : "No caption"
+                };
+
+                // Process table content - note the different namespace for table elements
+
+                var tgroup = table.Element(CalsNs + "tgroup");
+                if (tgroup != null)
+                {
+                    Console.WriteLine("Found <tgroup> in table.");
+
+
+                    // Get column specifications
+                    var colspecs = tgroup.Elements(CalsNs + "colspec").ToList();
+                    var colnames = colspecs.Select(c => c.Attribute("colname")?.Value).ToList();
+                    Console.WriteLine($"Found {colnames.Count} columns: {string.Join(", ", colnames)}");
+
+                    // Process headers
+                    var headers = new List<string>();
+                    var thead = tgroup.Element(CalsNs + "thead");
+                    if (thead != null)
+                    {
+                        headers = thead.Descendants(CeNs + "entry")
+                            .Select(e => ExtractEntryText(e))
+                            .ToList();
+                        Console.WriteLine($"Found table headers: {string.Join(", ", headers)}");
+                    }
+                    else
+                    {
+                        Console.WriteLine("No <thead> found in <tgroup>.");
+                    }
+
+                    // Process rows
+                    // Process rows
+                    var tbody = tgroup.Elements(CalsNs + "tbody");
+                    if (tbody != null)
+                    {
+                        var rows = tbody.Elements(CalsNs + "row").ToList();
+                        Console.WriteLine($"Found {rows.Count} <row> elements in <tbody>.");
+
+                        foreach (var row in rows)
+                        {
+                            var rowDict = new Dictionary<string, string>();
+                            var entries = row.Elements(CeNs + "entry").ToList();
+                            Console.WriteLine($"Processing row with {entries.Count} entries.");
+
+                            // Try first approach (using colname attributes)
+                            if (entries.Any(e => e.Attribute("colname") != null))
+                            {
+                                Console.WriteLine("Processing entries using colname attributes");
+                                // Existing colname-based approach
+                                var headerMapping = new Dictionary<string, string>();
+                                for (int i = 0; i < colnames.Count; i++)
+                                {
+                                    var header = i < headers.Count ? headers[i] : colnames[i];
+                                    headerMapping[colnames[i]] = header;
+                                }
+
+                                foreach (var entry in entries)
+                                {
+                                    var colname = entry.Attribute("colname")?.Value;
+                                    if (!string.IsNullOrEmpty(colname) && headerMapping.ContainsKey(colname))
+                                    {
+                                        var entryText = ExtractEntryText(entry);
+                                        rowDict[headerMapping[colname]] = entryText;
+                                        Console.WriteLine($"Entry: Column='{colname}', Header='{headerMapping[colname]}', Value='{entryText}'");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("Processing entries using positional matching");
+                                // Fall back to positional matching
+                                for (int i = 0; i < entries.Count && i < colnames.Count; i++)
+                                {
+                                    var header = i < headers.Count ? headers[i] : colnames[i];
+                                    var entryText = ExtractEntryText(entries[i]);
+                                    rowDict[header] = entryText;
+                                    Console.WriteLine($"Entry: Position={i}, Header='{header}', Value='{entryText}'");
+                                }
+                            }
+
+                            // Ensure all columns are present in the row
+                            for (int i = 0; i < colnames.Count; i++)
+                            {
+                                var header = i < headers.Count ? headers[i] : colnames[i];
+                                if (!rowDict.ContainsKey(header))
+                                {
+                                    rowDict[header] = string.Empty;
+                                }
+                            }
+
+                            newTable.Rows.Add(rowDict);
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No <tbody> found in <tgroup>.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("No <tgroup> found in table.");
+                }
+
+                converter.Tables.Add(newTable);
+                Console.WriteLine("Added new ExtractedTable to converter.Tables.");
+            }
+
+            //pretty print resulting tables
+            Console.WriteLine("Processed all tables. Total tables found: " + converter.Tables.Count);
+            foreach (var table in converter.Tables)
+            {
+                Console.WriteLine($"Table Caption: {table.Caption}");
+                Console.WriteLine("Rows:");
+                foreach (var row in table.Rows)
+                {
+                    Console.WriteLine(string.Join(", ", row.Select(kv => $"{kv.Key}: {kv.Value}")));
+                }
+            }
+
+
+            Console.WriteLine("Exiting ProcessTables.");
+        }
+
+        private static string ExtractCaption(XElement captionElement)
+        {
+            if (captionElement == null) return "No caption";
+
+            // Handle simple-para and its content
+            var simplePara = captionElement.Element(CeNs + "simple-para");
+            if (simplePara != null)
+            {
+                return string.Concat(simplePara.Nodes()
+                    .Select(n => n.NodeType == System.Xml.XmlNodeType.Text ?
+                        ((XText)n).Value :
+                        (n as XElement)?.Value ?? ""));
+            }
+
+            return captionElement.Value;
+        }
+
+        private static string ExtractEntryText(XElement entry)
+        {
+            if (entry == null) return string.Empty;
+
+            // Handle entry content which might contain formatting elements
+            return string.Concat(entry.Nodes()
+                .Select(n =>
+                {
+                    if (n.NodeType == System.Xml.XmlNodeType.Text)
+                        return ((XText)n).Value;
+
+                    var element = n as XElement;
+                    if (element != null)
+                    {
+                        // Handle specific elements
+                        if (element.Name == CeNs + "italic" || element.Name.LocalName == "italic")
+                            return $"({element.Value})";
+                        if (element.Name == CeNs + "br" || element.Name.LocalName == "br")
+                            return " ";
+                    }
+                    return string.Empty;
+                })).Trim();
         }
 
         private static void ProcessSections(XElement ceSections, ElsevierArticleXMLConverter converter)

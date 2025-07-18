@@ -9,12 +9,13 @@ using System.Web;
 using Microsoft.AspNetCore.Mvc;
 using Entities;
 using PeptideDataHomogenizer.Data;
+using static PeptideDataHomogenizer.Components.Pages.Home;
 
 namespace PeptideDataHomogenizer.Tools.PubMedSearch
 {
     public interface IPubMedAPIConsumer
     {
-        Task<SearchResults> SearchArticlesAsync(string query, string db = "pubmed", int page = 1, int pageSize = 5, string apiKey = null);
+        Task<SearchResults> SearchArticlesAsync(string query,AdditionalQueryParams additionalQueryParams, string db = "pubmed", int page = 1, int pageSize = 5, string apiKey = null);
         Task<List<ArticleDetail>> GetArticlesFromPubMedApi(List<string> ids, string db = "pubmed");
     }
 
@@ -51,12 +52,14 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
         /// <returns></returns>
         public async Task<SearchResults> SearchArticlesAsync(
             string query,
+            AdditionalQueryParams additionalQueryParams,
             string db = "pubmed",
             int page = 1,
             int pageSize = 5,
-            string apiKey = null)
+            string apiKey = null
+            )
         {
-            var (totalCount, allIds) = await PerformInitialSearch(query, db, page, pageSize, apiKey);
+            var (totalCount, allIds) = await PerformInitialSearch(query, db, page, pageSize, apiKey,additionalQueryParams);
 
             return new SearchResults
             {
@@ -68,7 +71,7 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
         }
 
         private async Task<(int totalCount, List<string> ids)> PerformInitialSearch(
-            string query, string db, int page, int pageSize, string apiKey)
+            string query, string db, int page, int pageSize, string apiKey, AdditionalQueryParams additionalQueryParams)
         {
             EnsureRateLimit();
 
@@ -81,15 +84,40 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
                 ["usehistory"] = "y",
                 ["retmode"] = "json"
             };
+            if (additionalQueryParams != null)
+            {
+                if (!string.IsNullOrEmpty(additionalQueryParams.Sort))
+                    parameters["sort"] = additionalQueryParams.Sort;
+                else
+                    parameters["sort"] = "relevance";
+                if (!string.IsNullOrEmpty(additionalQueryParams.Field))
+                    parameters["field"] = additionalQueryParams.Field;
+                if (additionalQueryParams.MinDate.HasValue && additionalQueryParams.MaxDate.HasValue)
+                {
+                    parameters["mindate"] = additionalQueryParams.MinDate.Value.ToString("yyyy/MM/dd");
+                    parameters["maxdate"] = additionalQueryParams.MaxDate.Value.ToString("yyyy/MM/dd");
+                }
+                if(additionalQueryParams.RelDate>0)
+                {
+                    parameters["reldate"] = additionalQueryParams.RelDate.ToString();
+                }
+            }
 
             if (!string.IsNullOrEmpty(apiKey))
                 parameters["api_key"] = apiKey;
 
+            //print request uri
+            Console.WriteLine($"PubMed API request: {BaseUrl}esearch.fcgi?{BuildQuery(parameters)}");
+
             var response = await ExecuteWithRetry(() =>
                 _http.GetAsync($"esearch.fcgi?{BuildQuery(parameters)}"));
 
+            Console.WriteLine($"PubMed API response: {response.RequestMessage.RequestUri}");
+
             using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
             var result = doc.RootElement.GetProperty("esearchresult");
+
+            Console.WriteLine($"PubMed API result: {result}");
 
             var totalCount = Convert.ToInt32(result.GetProperty("count").GetString());
             var ids = result.GetProperty("idlist").EnumerateArray()

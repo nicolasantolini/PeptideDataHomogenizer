@@ -1,0 +1,79 @@
+﻿@using Entities  
+
+<div class="card mb-4">  
+    <div class="card-body p-0">  
+        <div class="table-responsive">  
+            <table class="table table-hover align-middle">  
+                <thead class="table-light">  
+                    <tr>  
+                        <th>Logo</th>  
+                        <th>Name</th>  
+                        <th>Website</th>  
+                        <th>Actions</th>  
+                    </tr>  
+                </thead>  
+                <tbody>  
+                    @foreach (var org in Organizations)  
+                    {  
+                        <tr>  
+                            <!-- Replace the logo cell in the table -->  
+                            <td>  
+                                @if (org.LogoData!=null && org.LogoData.Length>0)
+                                {
+                                <img src="data:@org.ContentType;base64,@(Convert.ToBase64String(org.LogoData))" class="rounded-circle border"
+                                     style="width: 150px; height: 150px; object-fit: contain; background-color: #f8f9fa;"
+                                     @onclick="@(() => OnShowFullImage.InvokeAsync((org.ContentType, org.LogoData)))" />
+                                }
+                                else  
+                                {  
+                                    <div class="rounded-circle border bg-light d-flex justify-content-center align-items-center"  
+                                         style="width: 60px; height: 60px;">  
+                                        <i class="bi bi-building text-secondary"></i>  
+                                    </div>  
+                                }  
+                            </td>  
+
+                            <!-- Remove the description column completely from the table -->  
+                            <td>@org.Name</td>  
+                            <td>  
+                                @if (!string.IsNullOrEmpty(org.WebsiteUrl))  
+                                {  
+                                    var websiteUrl = org.WebsiteUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || org.WebsiteUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)  
+                                        ? org.WebsiteUrl  
+                                        : $"https://{org.WebsiteUrl}";  
+                                    <a href="@websiteUrl" target="_blank" class="text-decoration-none">  
+                                        <i class="bi bi-box-arrow-up-right"></i> Visit  
+                                    </a>  
+                                }  
+                            </td>  
+                            <td>  
+                                <div class="d-flex gap-2">  
+                                    <button @onclick="() => OnEdit.InvokeAsync(org)" class="btn btn-sm btn-outline-primary">  
+                                        <i class="bi bi-pencil"></i>  
+                                    </button>  
+                                    <button @onclick="() => OnDelete.InvokeAsync(org)" class="btn btn-sm btn-outline-danger">  
+                                        <i class="bi bi-trash"></i>  
+                                    </button>  
+                                </div>  
+                            </td>  
+                        </tr>  
+                    }  
+                </tbody>  
+            </table>  
+        </div>  
+    </div>  
+</div>  
+
+@code {  
+    [Parameter]  
+    public List<Organization> Organizations { get; set; } = new();  
+
+    [Parameter]  
+    public EventCallback<Organization> OnEdit { get; set; }  
+
+    [Parameter]  
+    public EventCallback<Organization> OnDelete { get; set; }  
+
+    [Parameter]  
+    public EventCallback<(string contentType, byte[] imageData)> OnShowFullImage { get; set; }  
+}

@@ -1,0 +1,195 @@
+﻿@using Entities
+@using Microsoft.AspNetCore.Identity
+@using PeptideDataHomogenizer.Data
+@using PeptideDataHomogenizer.Services
+
+@page "/administrator-contacts"
+
+@inject DatabaseDataHandler DatabaseDataHandler
+@inject UserManager<ApplicationUser> UserManager
+@inject UserOrganizationService UserOrganizationService
+
+@rendermode InteractiveServer
+
+<div class="admin-contacts-container">
+    <h1 class="page-title">Administrators</h1>
+
+    <div class="admin-grid">
+        @foreach (var admin in Admins)
+        {
+            var userOrganizations = UsersPerOrganizations.Where(u => u.UserId == admin.Id).ToList();
+
+            <div class="admin-card">
+                <div class="admin-header">
+                    <div class="admin-initials">@admin.Initials</div>
+                    <div class="admin-info">
+                        <h3>@admin.ExtendedFullName</h3>
+                        <a href="mailto:@admin.Email" class="admin-email">@admin.Email</a>
+                    </div>
+                </div>
+
+                @if (userOrganizations.Any())
+                {
+                    <div class="admin-organizations">
+                        <h4>Organizations</h4>
+                        <div class="org-list">
+                            @foreach (var org in userOrganizations)
+                            {
+                                <div class="org-item">
+                                    @if (org.Organization?.LogoData != null)
+                                    {
+                                        <img src="data:@org.Organization.ContentType;base64,@(Convert.ToBase64String(org.Organization.LogoData))" alt="@org.Organization.Name" class="org-logo" />
+                                    }
+                                    <span class="org-name">@org.Organization?.Name</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ApplicationUser> Admins = new();
+    private List<UsersPerOrganization> UsersPerOrganizations = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Load admin users (case sensitive for "Admin" in roles)
+            var allUsers = UserManager.Users.ToList();
+            foreach (var user in allUsers)
+            {
+                var roles = await UserManager.GetRolesAsync(user);
+                if (roles.Any(r => r.Contains("Admin")))
+                {
+                    Admins.Add(user);
+                }
+            }
+            Console.WriteLine("print admins");
+            Admins.ForEach(a => Console.WriteLine(a.Email));
+
+            // Load user organizations
+            UsersPerOrganizations = await UserOrganizationService.GetUsersPerOrganizationByListOfUserIdsAsync(Admins.Select(a=>a.Id).ToList());
+
+            StateHasChanged();
+        }
+    }
+}
+
+<style>
+    /* Base Styles */
+    .admin-contacts-container {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+        color: #333;
+    }
+
+    .page-title {
+        font-weight: 500;
+        font-size: 2rem;
+        margin-bottom: 2rem;
+        color: #1a1a1a;
+    }
+
+    /* Admin Grid */
+    .admin-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+
+    /* Admin Card */
+    .admin-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        transition: box-shadow 0.2s ease;
+    }
+
+        .admin-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+    /* Admin Header */
+    .admin-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .admin-initials {
+        width: 48px;
+        height: 48px;
+        background-color: #f5f5f5;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 500;
+        font-size: 1.1rem;
+        margin-right: 1rem;
+    }
+
+    .admin-info h3 {
+        margin: 0;
+        font-weight: 500;
+        font-size: 1.1rem;
+    }
+
+    .admin-email {
+        display: block;
+        color: #666;
+        text-decoration: none;
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+    }
+
+        .admin-email:hover {
+            color: #1a73e8;
+            text-decoration: underline;
+        }
+
+    /* Organizations */
+    .admin-organizations {
+        border-top: 1px solid #eee;
+        padding-top: 1rem;
+    }
+
+        .admin-organizations h4 {
+            margin: 0 0 0.75rem 0;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #666;
+        }
+
+    .org-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .org-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .org-logo {
+        width: 30px;
+        height: 30px;
+        border-radius: 4px;
+        object-fit: contain;
+    }
+
+    .org-name {
+        font-size: 0.85rem;
+        color: #555;
+    }
+</style>

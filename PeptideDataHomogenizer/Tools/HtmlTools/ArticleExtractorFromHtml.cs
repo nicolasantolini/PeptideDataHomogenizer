@@ -2,17 +2,26 @@
 {
     using Entities;
     using HtmlAgilityPack;
+    using Microsoft.AspNetCore.Mvc;
+    using Microsoft.Extensions.DependencyInjection;
+    using PeptideDataHomogenizer.Tools.WebScraper;
     using System;
+    using System.Buffers.Text;
     using System.Collections.Generic;
     using System.Linq;
     using System.Text;
 
-    using Microsoft.Extensions.DependencyInjection;
-    using PeptideDataHomogenizer.Tools.WebScraper;
-
     public class ArticleExtractorFromHtml
         {
-            private static readonly List<string> BlockedChapters = new List<string>
+            private ImagesExtractorFromHtml _imagesExtractor;
+
+            public ArticleExtractorFromHtml([FromServices] ImagesExtractorFromHtml imagesExtractor)
+            {
+                _imagesExtractor = imagesExtractor ?? throw new ArgumentNullException(nameof(imagesExtractor), "Images extractor cannot be null");
+            }
+
+
+        private static readonly List<string> BlockedChapters = new List<string>
             {
                 "Acknowledgments",
                 "References",
@@ -106,28 +115,16 @@
 
             };
 
-            private readonly IWebHostEnvironment _hostingEnvironment;
-            private readonly HttpClient _httpClient;
-
-            public ArticleExtractorFromHtml(IWebHostEnvironment hostingEnvironment, HttpClient httpClient)
-            {
-                _hostingEnvironment = hostingEnvironment;
-                _httpClient = httpClient;
-                _httpClient.DefaultRequestHeaders.Add("User-Agent", RandomUserAgentGenerator.GetRandomUserAgent());
-                _httpClient.Timeout = TimeSpan.FromSeconds(30); // Set a reasonable timeout for HTTP requests
-        }
-
-
-        public List<Chapter> ExtractChapters(string html, string title,string url)
+        public async Task<(List<Chapter>,List<ExtractedTable>,List<ImageHolder>)> ExtractChaptersImagesAndTables(string html, string title,string url)
         {
             if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(title))
             {
-                return new List<Chapter>();
+                return (new List<Chapter>(), new List<ExtractedTable>(), new List<ImageHolder>());
             }
             //write html to wwwroot/html.txt
-            var htmlFilePath = Path.Combine(_hostingEnvironment.WebRootPath, "html.txt");
-            Directory.CreateDirectory(_hostingEnvironment.WebRootPath); // Ensure the directory exists
-            File.AppendAllText(htmlFilePath, html);
+            //var htmlFilePath = Path.Combine(_hostingEnvironment.WebRootPath, "html.txt");
+            //Directory.CreateDirectory(_hostingEnvironment.WebRootPath); // Ensure the directory exists
+            //File.AppendAllText(htmlFilePath, html);
 
 
             //extract url base from url
@@ -143,14 +140,21 @@
             doc.LoadHtml(html);
 
             Console.WriteLine(baseUri.ToString());
-            ImagesExtractorFromHtml.ExtractAndSaveImages(doc.DocumentNode, baseUri.ToString(),_hostingEnvironment,_httpClient).Wait();
+            var images = await _imagesExtractor.ExtractImagesAsync(doc.DocumentNode, baseUri.ToString());
+            //print all images caption and base64 string
+            foreach (var image in images)
+            {
+                Console.WriteLine("Image");
+                Console.WriteLine($"Image Caption: {image.Caption}");
+            }
+            var tables = HtmlTableExtractor.ExtractTablesFromHtml(html);
 
             RemoveUnwantedNodes(doc.DocumentNode);
             
 
             var chapters = ExtractChaptersFromCleanDocument(doc, title);
 
-            return chapters;
+            return (chapters,tables,images);
         }
 
         
@@ -494,15 +498,6 @@
             }
         }
 
-    public static class ServiceCollectionExtensions
-    {
-        public static IServiceCollection AddArticleExtractor(this IServiceCollection services)
-        {
-            services.AddSingleton<ArticleExtractorFromHtml>();
-            services.AddHttpClient();
-            return services;
-        }
-    }
 
 }
 

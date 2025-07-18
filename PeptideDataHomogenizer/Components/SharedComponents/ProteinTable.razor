@@ -1,0 +1,330 @@
+﻿@using Entities
+
+@using PeptideDataHomogenizer.Components.SharedComponents
+@inject IJSRuntime JSRuntime
+
+<div class="table-responsive mb-4">
+    <table id="resizableTable" class="table table-sm table-striped table-bordered align-middle protein-table">
+        <thead class="table-primary">
+            <tr>
+                <th style="white-space:normal; word-break:keep-all;">Protein ID (*)</th>
+                <th style="white-space:normal; word-break:keep-all;">Classification</th>
+                <th style="white-space:normal; word-break:keep-all;">Organism(s)</th>
+                <th style="white-space:normal; word-break:keep-all;">Method</th>
+                <th style="white-space:normal; word-break:keep-all;">Residue</th>
+                <th style="white-space:normal; word-break:keep-all;">Binder</th>
+                <th style="white-space:normal; word-break:keep-all;">Software Name</th>
+                <th style="white-space:normal; word-break:keep-all;">Software Version</th>
+                <th style="white-space:normal; word-break:keep-all;">Water Model</th>
+                <th style="white-space:normal; word-break:keep-all;">Water Model Type</th>
+                <th style="white-space:normal; word-break:keep-all;">Force Field</th>
+                <th style="white-space:normal; word-break:keep-all;">Simulation Method</th>
+                <th style="white-space:normal; word-break:keep-all;">Temperature (K)</th>
+                <th style="white-space:normal; word-break:keep-all;">Ions</th>
+                <th style="white-space:normal; word-break:keep-all;">Ion Concentration (mM)</th>
+                <th style="white-space:normal; word-break:keep-all;">Simulation Length (ns)</th>
+                <th style="white-space:normal; word-break:keep-all;">Kd (M)</th>
+                <th style="white-space:normal; word-break:keep-all;">K<sub>off</sub> (s<sup>−1</sup>)</th>
+                <th style="white-space:normal; word-break:keep-all;">K<sub>on</sub> (M<sup>−1</sup>s<sup>−1</sup>)</th>
+                <th style="white-space:normal; word-break:keep-all;">Binding Energy (kcal/mol)</th>
+                <th style="white-space:normal; word-break:keep-all;">Approved</th>
+                <th style="white-space:normal; word-break:keep-all;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var protein in ProteinData)
+            {
+                <tr>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.ProteinId, 0)"
+                               @bind="protein.ProteinId"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @bind="protein.Classification"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @bind="protein.Organism"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @bind="protein.Method"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.Residue, 10)"
+                               @bind="protein.Residue"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.Binder, 11)"
+                               @bind="protein.Binder"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.SoftwareName, 1)"
+                               @bind="protein.SoftwareName"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.SoftwareVersion, 9)"
+                               @bind="protein.SoftwareVersion"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.WaterModel, 2)"
+                               @bind="protein.WaterModel"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input
+                               @bind="protein.WaterModelType"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.ForceField, 3)"
+                               @bind="protein.ForceField"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.SimulationMethod, 4)"
+                               @bind="protein.SimulationMethod"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture), 5)"
+                               @bind="protein.Temperature"
+                               type="number"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.Ions, 6)"
+                               @bind="protein.Ions"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.IonConcentration.ToString(), 7)"
+                               @bind="protein.IonConcentration"
+                               type="number"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input @onclick="() => HighlightText(protein.SimulationLength.ToString(), 8)"
+                               @bind="protein.SimulationLength"
+                               type="number"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input
+                               type="number"
+                               @bind="protein.Kd" 
+                               @ondblclick="()=>OpenModalConversion(protein.Id,0,protein.Kd)"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input
+                               type="number"
+                               @bind="protein.KOff"
+                               @ondblclick="() => OpenModalConversion(protein.Id, 1,protein.KOff)"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input
+                               type="number"
+                               @bind="protein.KOn"
+                               @ondblclick="() => OpenModalConversion(protein.Id, 2,protein.KOn)"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input
+                               type="number"
+                               @bind="protein.FreeBindingEnergy"
+                               @ondblclick="() => OpenModalConversion(protein.Id, 3,protein.FreeBindingEnergy)"
+                               class="form-control form-control-sm" />
+                    </td>
+                    <td>
+                        <input type="checkbox" @bind="protein.Approved"/>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger"
+                                @onclick="async () => await RemoveProtein.InvokeAsync(protein)">
+                            Remove
+                        </button>
+                    </td>
+                </tr>
+                <PDBResultsConverter ProteinId="@SelectedProteinId"
+                                     ConversionType="@ConversionType"
+                                     Value="@Value"
+                                     OnConversionConfirmed="@OnConversionConfirmed" 
+                                     @ref="@PDBResultsConverter"/>
+                
+            }
+            <tr>
+                <td style="min-width: 120px; max-width: 180px;">
+                    
+                    <input @bind="NewProtein.ProteinId"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 180px;">
+                    <input @bind="NewProtein.Classification"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 200px;">
+                    <input @bind="NewProtein.Organism"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 160px;">
+                    <input @bind="NewProtein.Method"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 80px; max-width: 120px;">
+                    <input @bind="NewProtein.Residue"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 80px; max-width: 120px;">
+                    <input @bind="NewProtein.Binder"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 180px;">
+                    <input @bind="NewProtein.SoftwareName"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 140px;">
+                    <input @bind="NewProtein.SoftwareVersion"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 140px;">
+                    <input @bind="NewProtein.WaterModel"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 140px;">
+                    <input @bind="NewProtein.WaterModelType"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 180px;">
+                    <input @bind="NewProtein.ForceField"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 180px;">
+                    <input @bind="NewProtein.SimulationMethod"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 80px; max-width: 100px;">
+                    <input @bind="NewProtein.Temperature"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 80px; max-width: 120px;">
+                    <input @bind="NewProtein.Ions"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 140px;">
+                    <input @bind="NewProtein.IonConcentration"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 160px;">
+                    <input @bind="NewProtein.SimulationLength"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 140px;">
+                    <input @bind="NewProtein.Kd"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 120px; max-width: 160px;">
+                    <input @bind="NewProtein.KOff"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 100px; max-width: 140px;">
+                    <input @bind="NewProtein.KOn"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td style="min-width: 140px; max-width: 180px;">
+                    <input @bind="NewProtein.FreeBindingEnergy"
+                           type="number"
+                           class="form-control form-control-sm" />
+                </td>
+                <td class="text-center" style="min-width: 80px; max-width: 100px;">
+                    <input type="checkbox" @bind="NewProtein.Approved" />
+                </td>
+                <td style="min-width: 80px; max-width: 100px;">
+                    <button class="btn btn-sm btn-success"
+                            @onclick="async() => await AddProtein.InvokeAsync()">
+                        Add
+                    </button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+
+
+@code {
+    [Parameter]
+    public IEnumerable<ProteinData> ProteinData { get; set; } = new List<ProteinData>();
+
+    [Parameter]
+    public ProteinData NewProtein { get; set; } = new ProteinData();
+
+    [Parameter]
+    public EventCallback<ProteinData> RemoveProtein { get; set; }
+
+    [Parameter]
+    public EventCallback AddProtein { get; set; }
+
+    [Parameter]
+    public Action<string, int> HighlightText { get; set; } = (text, index) => { };
+
+    [Parameter]
+    public EventCallback<(int proteinId, int index, double value)> OnConversionConfirmed { get; set; }
+
+    private PDBResultsConverter PDBResultsConverter { get; set; }
+
+    private int SelectedProteinId { get; set; } = 0;
+    private int ConversionType { get; set; } = 0;
+    private double Value { get; set; } = 0.0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JSRuntime.InvokeVoidAsync("setupColumnResizing");
+    }
+
+    private void OpenModalConversion(int proteinId, int index,double value)
+    {
+        SelectedProteinId = proteinId;
+        Value = value;
+        ConversionType = index;
+        PDBResultsConverter?.ShowModal();
+    }
+
+}
+
+
+
+<style>
+    .column-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 5px;
+        height: 100%;
+        cursor: col-resize;
+        background-color: transparent;
+        z-index: 1;
+    }
+
+        .column-resizer:hover {
+            background-color: #007bff;
+            opacity: 0.5;
+        }
+
+    th {
+        position: relative;
+    }
+</style>
