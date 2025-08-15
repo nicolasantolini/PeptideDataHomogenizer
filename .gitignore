@@ -363,3 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 /PeptideDataHomogenizer/appsettings.json
 /PeptideDataHomogenizer/Data/Application.db
+/PeptideDataHomogenizer/Scaffolding-README.md
+/PeptideDataHomogenizer/CurrentAISolution.py
