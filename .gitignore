@@ -365,3 +365,5 @@ FodyWeavers.xsd
 /PeptideDataHomogenizer/Data/Application.db
 /PeptideDataHomogenizer/Scaffolding-README.md
 /PeptideDataHomogenizer/CurrentAISolution.py
+/PeptideDataHomogenizer/Data/Application.db-shm
+/PeptideDataHomogenizer/Data/Application.db-wal
