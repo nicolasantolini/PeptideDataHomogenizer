@@ -132,8 +132,7 @@
             }
             catch (Exception ex)
             {
-                // Don't fail the download if we can't save headers
-                Console.WriteLine($"Warning: Failed to save response headers: {ex.Message}");
+                Console.WriteLine($"Warning: Failed to save response headers: {ex}");
             }
         }
 

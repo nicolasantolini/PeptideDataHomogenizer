@@ -20,12 +20,12 @@ namespace Entities
 
         [MaxLength(25 * 1024 * 1024)]
         [Column("image_data")]
-        public byte[] ImageData { get; set; } // The actual image bytes
+        public byte[] ImageData { get; set; }
 
         [Column("file_name")]
-        public string FileName { get; set; }
+        public string FileName { get; set; } = "";
         [Column("content_type")]
-        public string ContentType { get; set; } // e.g., "image/jpeg"
+        public string ContentType { get; set; } = "";
 
         [ForeignKey("article_doi")]
         [Column("article_doi")]

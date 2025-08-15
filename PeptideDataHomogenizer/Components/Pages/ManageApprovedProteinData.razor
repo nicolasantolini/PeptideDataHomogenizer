@@ -18,6 +18,8 @@
 @inject ArticlePerProjectService ArticlePerProjectService
 @inject UserOrganizationService UserOrganizationService
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
 
 @rendermode InteractiveServer
 
@@ -195,7 +197,7 @@ else{
                                 <td>@protein.SoftwareName</td>
                                 <td>@protein.SoftwareVersion</td>
                                 <td>@protein.Residue</td>
-                                    <td>@protein.Binder</td>
+                                <td>@protein.Binder</td>
                                 <td>@protein.WaterModel</td>
                                 <td>@protein.WaterModelType</td>
                                 <td>@protein.ForceField</td>
@@ -353,7 +355,6 @@ OpenOnFirstRender="false">
         <p class="mb-3 text-muted">
             Review and resolve conflicting values for each property. Select the preferred value to apply to all records.
         </p>
-            <!-- ... existing header ... -->
             @if (conflicts?.Any() ?? false)
             {
                 @foreach (var conflict in conflicts)
@@ -727,11 +728,6 @@ OpenOnFirstRender="false">
     {
         allProteinData = await ProteinDataPerProjectService.GetApprovedProteinDataByProjectIdAsync(currentProjectId.Value);
 
-        //print all protein data id's of the first 10 proteins
-        foreach(var protein in allProteinData.Take(10))
-        {
-            Console.WriteLine(protein.ProteinId);
-        }
         UpdateFilteredData();
         InitializeFilterOptions();
     }
@@ -946,7 +942,7 @@ OpenOnFirstRender="false">
             csvData.AppendLine($"{protein.ProteinId},{protein.Classification},{protein.Organism},{protein.Method},{protein.Residue},{protein.SoftwareName},{protein.SoftwareVersion},{protein.WaterModel},{protein.WaterModelType},{protein.ForceField},{protein.SimulationMethod},{protein.Temperature},{protein.Ions},{protein.IonConcentration},{protein.SimulationLength},{protein.Kd},{protein.KOff},{protein.KOn},{protein.FreeBindingEnergy},{currentProjectId.Value},{articleDoi},{approvedBy}");
         }
 
-        // Use JavaScript interop to download the CSV file
+        // Use JavaScript to download the CSV file
         var csvContent = csvData.ToString();
         var fileName = "protein_data.csv";
         var mimeType = "text/csv";

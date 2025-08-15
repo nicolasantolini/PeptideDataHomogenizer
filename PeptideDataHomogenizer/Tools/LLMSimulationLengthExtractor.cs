@@ -25,6 +25,7 @@
 
         public async Task<List<string>> ExtractSimulationTimeAsync(string inputText)
         {
+            // Returns empty because of poor performance of the model
             return new List<string>();
             if (string.IsNullOrWhiteSpace(inputText))
             {

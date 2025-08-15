@@ -43,7 +43,6 @@ namespace PeptideDataHomogenizer.Data
             await _context.SaveChangesAsync();
         }
 
-        //getasync conditional¨only conditional if query is not null only func like Where, OrderBy, etc.
         public async Task<List<T>> GetAsync<T>(Func<IQueryable<T>, IQueryable<T>> query = null) where T : class
         {
             _context.ChangeTracker.Clear();

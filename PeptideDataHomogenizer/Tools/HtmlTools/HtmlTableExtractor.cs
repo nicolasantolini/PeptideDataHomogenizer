@@ -27,10 +27,8 @@
             {
                 var extractedTable = new ExtractedTable();
 
-                // Enhanced caption extraction
                 extractedTable.Caption = ExtractTableCaption(table);
 
-                // Rest of the table processing remains the same...
                 var rows = table.SelectNodes(".//tr");
                 if (rows == null || !rows.Any()) continue;
 
@@ -172,7 +170,7 @@
                 }
             }
 
-            // 6. Check for table summary attribute (older HTML)
+            // 6. Check for table summary attribute
             var summary = table.GetAttributeValue("summary", null);
             if (!string.IsNullOrWhiteSpace(summary))
             {

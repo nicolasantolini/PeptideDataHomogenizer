@@ -6,7 +6,6 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
 {
     public class ElsevierArticleXMLConverter
     {
-        // Add a new property to the Section class to fix the error
         public class Section
         {
             public string Id { get; set; }
@@ -15,7 +14,6 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
             public List<Paragraph> Paragraphs { get; } = new List<Paragraph>();
             public List<ListItem> ListItems { get; } = new List<ListItem>();
 
-            // Add this property to allow nested sections
             public List<Section> Sections { get; } = new List<Section>();
         }
 
@@ -221,7 +219,6 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
                     }
 
                     // Process rows
-                    // Process rows
                     var tbody = tgroup.Elements(CalsNs + "tbody");
                     if (tbody != null)
                     {
@@ -297,7 +294,6 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
                 Console.WriteLine("Added new ExtractedTable to converter.Tables.");
             }
 
-            //pretty print resulting tables
             Console.WriteLine("Processed all tables. Total tables found: " + converter.Tables.Count);
             foreach (var table in converter.Tables)
             {
@@ -380,7 +376,6 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
                 };
 
                 ProcessParagraphs(section, newSection);
-                //ProcessLists(section, newSection);
                 ProcessSubsections(section, newSection);
 
                 converter.Sections.Add(newSection);

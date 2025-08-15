@@ -34,8 +34,6 @@
                 string browser = os.Contains("iPhone")
                     ? "safari"
                     : browserTypes[rand.Next(browserTypes.Length)];
-                //if os is mac, use safari
-
 
                 var template = userAgentTemplates[browser];
 

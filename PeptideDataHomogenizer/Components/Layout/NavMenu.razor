@@ -3,6 +3,9 @@
 @using PeptideDataHomogenizer.State
 @implements IDisposable
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @rendermode InteractiveServer
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime

@@ -14,10 +14,10 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
 
-        public ElsevierArticleFetcher([FromServices] HttpClient _http,[FromServices] IWebHostEnvironment webHostEnvironment)
+        public ElsevierArticleFetcher([FromServices] HttpClient _http,[FromServices] IWebHostEnvironment webHostEnvironment,string apiKey)
         {
             _httpClient = _http;
-            _apiKey = "0e70f027e08a066848325116931c83da";
+            _apiKey = apiKey;
 
             // Set default headers
             _httpClient.DefaultRequestHeaders.Add("X-ELS-APIKey", _apiKey);
@@ -50,8 +50,7 @@ namespace PeptideDataHomogenizer.Tools.ElsevierTools
                 {
                     ElsevierArticleXMLConverter articleContent = new ElsevierArticleXMLConverter();
                     var xmlContent = await response.Content.ReadAsStringAsync();
-                    //print xml
-                    //Console.WriteLine($"XML Content: {xmlContent}");
+
                     articleContent = ElsevierArticleXMLConverter.ParseArticleBody(xmlContent);
 
 

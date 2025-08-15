@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -26,10 +27,11 @@ namespace Entities
 
         [MaxLength(25 * 1024 * 1024)]
         [Column("logo_data")]
-        public byte[] LogoData { get; set; }
+        [AllowNull]
+        public byte[]? LogoData { get; set; }
         [Column("content_type")]
         [MaxLength(50)]
-        public string ContentType { get; set; } // e.g., "image/jpeg"
+        public string ContentType { get; set; } = "";
 
         [Column("website_url")]
         [MaxLength(500)]

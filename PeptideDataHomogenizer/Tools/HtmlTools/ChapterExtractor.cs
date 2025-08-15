@@ -15,7 +15,7 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
         private static readonly Dictionary<string, ChapterHeaderDetector> SourceDetectors = new()
             {
                 { "wileyonlinelibrary.com", IsChapterHeaderInWiley },
-                { "https://pubs.acs.org/", IsChapterHeaderInACS },
+                { "pubs.acs.org/", IsChapterHeaderInACS },
                 { "default", DefaultChapterHeaderDetector }
             };
 
@@ -46,9 +46,6 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
                 foreach (var page in pdf.GetPages())
                 {
                     var text = ContentOrderTextExtractor.GetText(page);
-
-                    // Write text to htmlfrompdf.txt
-                    File.AppendAllText("wwwroot/htmlfrompdf.txt", text);
 
                     // Process text to detect structure
                     var lines = text.Split('\n');
@@ -130,7 +127,7 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
             return line.Length > 5 && char.IsDigit(line[0]) && line[1] == '.' && line.Any(char.IsUpper);
         }
 
-        // Default/generic chapter header detection (can be improved or replaced)
+        // Default/generic chapter header detection
         private static bool DefaultChapterHeaderDetector(string line)
         {
             string trimmedLine = line.Trim();

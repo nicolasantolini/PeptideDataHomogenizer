@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Entities
 {
@@ -19,16 +20,13 @@ namespace Entities
         [MaxLength(1000)]
         public string Description { get; set; } = string.Empty;
 
-        //[Column("logo_path")]
-        //[MaxLength(500)]
-        //public string LogoPath { get; set; } = string.Empty;
-
         [MaxLength(25 * 1024 * 1024)]
         [Column("logo_data")]
-        public byte[] LogoData { get; set; }
+        [AllowNull]
+        public byte[]? LogoData { get; set; }
         [Column("content_type")]
         [MaxLength(50)]
-        public string ContentType { get; set; }
+        public string ContentType { get; set; } = "";
 
         [ForeignKey("OrganizationId")]
         public Organization Organization { get; set; }

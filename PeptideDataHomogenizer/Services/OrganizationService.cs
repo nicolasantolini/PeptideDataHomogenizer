@@ -28,10 +28,6 @@
 
         public async Task AddOrganizationAsync(Organization organization, IBrowserFile logoFile = null)
         {
-            //if (logoFile != null && logoFile.Size > 0)
-            //{
-            //    organization.LogoPath = await SaveLogoAsync(logoFile);
-            //}
             _dbContext.Organizations.Add(organization);
             await _dbContext.SaveChangesAsync();
         }

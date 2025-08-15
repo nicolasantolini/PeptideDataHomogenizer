@@ -12,6 +12,9 @@
 @inject UserProjectService UserProjectService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<ApplicationUser> UserManager
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @implements IDisposable
                                     
 @rendermode InteractiveServer
@@ -257,18 +260,15 @@ else{
         if (firstRender)
         {
             isRenderingPage = true;
-            Console.WriteLine("OnAfterRenderAsync: firstRender = true");
             var user = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
             if (user == null)
             {
-                Console.WriteLine("OnAfterRenderAsync: user is null");
                 SetStatusMessage("You must be logged in to access this page.", false);
                 isRenderingPage = false;
                 return;
             }
 
             var roles = await UserManager.GetRolesAsync(user);
-            Console.WriteLine($"OnAfterRenderAsync: user roles = {string.Join(",", roles)}");
 
             var organizations = await UserOrganizationService.GetOrganizationsByUserIdAsync(user.Id);
             OrganizationId = await ContextCookieManager.GetContextAsync(JSRuntime);
@@ -277,14 +277,12 @@ else{
             if (organizations.Any() && (!organizations.Any(o => o.Id == OrganizationId) || OrganizationId < 1))
             {
                 var firstOrgId = organizations.First().Id;
-                Console.WriteLine($"OnAfterRenderAsync: setting organizationId to firstOrgId = {firstOrgId}");
                 await ContextCookieManager.SetContextAsync(JSRuntime, firstOrgId);
                 OrganizationId = firstOrgId;
             }
 
             if (OrganizationId == null || OrganizationId < 1 || (!organizations.Any(o => o.Id == OrganizationId) && !roles.Contains("Admin") && !roles.Contains("SuperAdmin")))
             {
-                Console.WriteLine("OnAfterRenderAsync: invalid organizationId");
                 SetStatusMessage("Please select a valid organization from the context header.", false);
                 await ContextCookieManager.SetContextAsync(JSRuntime, 0);
                 await ProjectCookieManager.SetProjectAsync(JSRuntime, 0);
@@ -297,7 +295,6 @@ else{
 
             if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
             {
-                Console.WriteLine("OnAfterRenderAsync: user is Admin or SuperAdmin, setting UserRole to admin");
                 UserOrganizationRole = "admin";
             }
             await LoadProjects();
@@ -312,13 +309,11 @@ else{
         Projects = await ProjectService.GetProjectsByOrganizationIdAsync(OrganizationId.Value);
         currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
         UserOrganizationRole = await UserOrganizationService.GetRoleByOrganizationIdAndUserIdAsync(OrganizationId.Value, currentUser.Id);
-        Console.WriteLine($"User Organization Role: {UserOrganizationRole}");
+
         var roles = await UserManager.GetRolesAsync(currentUser);
 
         if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
             UserOrganizationRole = "admin";
-
-        Console.WriteLine($"User Organization Role after check: {UserOrganizationRole}");
 
         StateHasChanged();
     }
@@ -404,20 +399,28 @@ else{
                 return;
             }
 
+            var format = "image/png";
+            if (LogoFile != null)
+            {
+                var resizedImage = await LogoFile.RequestImageFileAsync(format, 300, 300);
+                var buffer = new byte[resizedImage.Size];
+                await resizedImage.OpenReadStream().ReadAsync(buffer);
+
+                CurrentProject.ContentType = format;
+                CurrentProject.LogoData = buffer;
+            }
+
             if (CurrentProject.Id == 0)
             {
-                CurrentProject = await ProjectService.GetProjectMatchAsync(CurrentProject.OrganizationId, CurrentProject.Name, CurrentProject.Description);
-                if(CurrentProject != null)
+                var oldProject = await ProjectService.GetProjectMatchAsync(CurrentProject.OrganizationId, CurrentProject.Name, CurrentProject.Description);
+                if(oldProject != null)
                 {
                     await JSRuntime.InvokeVoidAsync("alert","A project with the same name and description already exists.");
                     return;
                 }
-                await DataHandler.AddAsync(CurrentProject);
+                await DataHandler.AddAsync<Project>(CurrentProject);
                 CurrentProject = await ProjectService.GetProjectMatchAsync(CurrentProject.OrganizationId, CurrentProject.Name, CurrentProject.Description);
-                // if (LogoFile != null)
-                // {
-                //     await SaveLogo();
-                // }
+                
 
                 if (currentUser != null)
                 {
@@ -428,11 +431,8 @@ else{
             }
             else
             {
+
                 await DataHandler.UpdateAsync(CurrentProject);
-                if (LogoFile != null)
-                {
-                    await SaveLogo();
-                }
                 SetStatusMessage("Project updated successfully!", true);
             }
 
@@ -445,41 +445,6 @@ else{
         }
     }
 
-    private async Task SaveLogo()
-    {
-        // var uploadsFolder = Path.Combine(Environment.WebRootPath, "project_logos");
-        // if (!Directory.Exists(uploadsFolder))
-        // {
-        //     Directory.CreateDirectory(uploadsFolder);
-        // }
-
-        // var uniqueFileName = Guid.NewGuid().ToString();
-        // //append the file extension from the original file
-        // var fileExtension = Path.GetExtension(LogoFile.Name);
-        // if (string.IsNullOrEmpty(fileExtension))
-        // {
-        //     fileExtension = ".png"; // Default to PNG if no extension is provided
-        // }
-        // uniqueFileName += fileExtension;
-        // var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-        // using (var fileStream = new FileStream(filePath, FileMode.Create))
-        // {
-        //     await LogoFile.OpenReadStream().CopyToAsync(fileStream);
-        // }
-
-        // CurrentProject.LogoPath = $"/project_logos/{uniqueFileName}";
-
-        var format = "image/png";
-        var resizedImage = await LogoFile.RequestImageFileAsync(format, 300, 300);
-        var buffer = new byte[resizedImage.Size];
-        await resizedImage.OpenReadStream().ReadAsync(buffer);
-
-        CurrentProject.ContentType = format;
-        CurrentProject.LogoData = buffer;
-
-        await DataHandler.UpdateAsync(CurrentProject);
-    }
 
     private async Task ConfirmDelete()
     {
@@ -545,14 +510,12 @@ else{
         return projectRole == "admin";
     }
 
-    //isprojecteditor
     private async Task<bool> IsProjectEditor(int projectId)
     {
         var projectRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(projectId, currentUser.Id);
         return projectRole == "editor";
     }
 
-    //isprojectvisitor
     private async Task<bool> IsProjectVisitor(int projectId)
     {
         var projectRole = await UserProjectService.GetRoleByProjectIdAndUserIdAsync(projectId, currentUser.Id);
@@ -570,6 +533,5 @@ else{
 
     public void Dispose()
     {
-        // Clean up if needed
     }
 }

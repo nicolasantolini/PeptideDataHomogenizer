@@ -121,13 +121,7 @@
             {
                 return (new List<Chapter>(), new List<ExtractedTable>(), new List<ImageHolder>());
             }
-            //write html to wwwroot/html.txt
-            //var htmlFilePath = Path.Combine(_hostingEnvironment.WebRootPath, "html.txt");
-            //Directory.CreateDirectory(_hostingEnvironment.WebRootPath); // Ensure the directory exists
-            //File.AppendAllText(htmlFilePath, html);
 
-
-            //extract url base from url
             if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var baseUri))
             {
                 baseUri = new Uri("https://example.com"); // Default base URL if none provided
@@ -141,12 +135,7 @@
 
             Console.WriteLine(baseUri.ToString());
             var images = await _imagesExtractor.ExtractImagesAsync(doc.DocumentNode, baseUri.ToString());
-            //print all images caption and base64 string
-            foreach (var image in images)
-            {
-                Console.WriteLine("Image");
-                Console.WriteLine($"Image Caption: {image.Caption}");
-            }
+
             var tables = HtmlTableExtractor.ExtractTablesFromHtml(html);
 
             RemoveUnwantedNodes(doc.DocumentNode);
@@ -196,13 +185,12 @@
                         Content = FormatText(doc.DocumentNode)
                     });
                 }
-            //if there are more than 5 chapters which are empty, remove them, try alternative
+
             if (chapters.Count(chapter => string.IsNullOrWhiteSpace(chapter.Content)) > 5 || chapters.Count(c=> c.Content.Length>70)<=3)
             {
                 Console.WriteLine("TRYING ALTERNATIVE");
                 chapters = ExtractChaptersAlternative(doc.DocumentNode.OuterHtml,title);
             }
-            //print chapters to json
             if (chapters.Count <2 || chapters.Count(chapter => string.IsNullOrWhiteSpace(chapter.Content)) > 5 || chapters.Count(c => c.Content.Length > 300) <= 3)
             {
                 Console.WriteLine("TRYING SECOND ALTERNATIVE");
@@ -311,7 +299,7 @@
             var doc = new HtmlDocument();
             doc.LoadHtml(htmlContent);
 
-            // Try to find article body - this will depend on the actual HTML structure
+            // Try to find article body
             var articleBody = doc.DocumentNode.SelectSingleNode("//div[contains(@class, 'article-body')]")
                              ?? doc.DocumentNode.SelectSingleNode("//div[contains(@class, 't-html')]")
                              ?? doc.DocumentNode;
@@ -397,23 +385,6 @@
             }
 
             return chapters;
-        }
-
-
-        private int GetHeadingLevel(HtmlNode node)
-        {
-            if (node.NodeType != HtmlNodeType.Element)
-                return 0;
-
-            var classAttr = node.GetAttributeValue("class", "");
-            if (string.IsNullOrEmpty(classAttr))
-                return 0;
-
-            var match = System.Text.RegularExpressions.Regex.Match(classAttr, @"h--heading(\d)");
-            if (match.Success && int.TryParse(match.Groups[1].Value, out int level))
-                return level;
-
-            return 0;
         }
 
         private void RemoveUnwantedNodes(HtmlNode node)

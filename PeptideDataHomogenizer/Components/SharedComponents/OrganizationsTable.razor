@@ -16,7 +16,6 @@
                     @foreach (var org in Organizations)  
                     {  
                         <tr>  
-                            <!-- Replace the logo cell in the table -->  
                             <td>  
                                 @if (org.LogoData!=null && org.LogoData.Length>0)
                                 {
@@ -32,8 +31,7 @@
                                     </div>  
                                 }  
                             </td>  
-
-                            <!-- Remove the description column completely from the table -->  
+  
                             <td>@org.Name</td>  
                             <td>  
                                 @if (!string.IsNullOrEmpty(org.WebsiteUrl))  

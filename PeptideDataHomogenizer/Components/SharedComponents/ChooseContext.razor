@@ -14,6 +14,9 @@
 @inject ProjectService ProjectService
 @inject NavigationManager NavigationManager
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @rendermode InteractiveServer
 
 @if (ShowModal)
@@ -338,40 +341,31 @@
     private async Task LoadData()
     {
         IsLoading = true;
-        Console.WriteLine("LoaadData: Start loading data");
 
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        Console.WriteLine($"LoaadData: Got authentication state. User authenticated: {authState.User.Identity?.IsAuthenticated}");
 
         currentUser = await UserManager.GetUserAsync(authState.User);
-        Console.WriteLine($"LoaadData: Current user: {(currentUser != null ? currentUser.UserName : "null")}");
 
         if (currentUser == null)
         {
-            Console.WriteLine("LoaadData: No user found, navigating to /login");
             NavigationManager.NavigateTo("/login");
             return;
         }
 
         var roles = await UserManager.GetRolesAsync(currentUser);
-        Console.WriteLine($"LoaadData: User roles: {string.Join(", ", roles)}");
 
         currentOrganizationId = CurrentOrganizationIdParam ?? await ContextCookieManager.GetContextAsync(JSRuntime);
-        Console.WriteLine($"LoaadData: currentOrganizationId: {currentOrganizationId}");
 
         currentProjectId = CurrentProjectIdParam ?? await ProjectCookieManager.GetProjectAsync(JSRuntime);
-        Console.WriteLine($"LoaadData: currentProjectId: {currentProjectId}");
 
         if (roles.Contains("Admin") || roles.Contains("SuperAdmin"))
         {
             Organizations = await DatabaseDataHandler.GetAllAsync<Organization>();
-            Console.WriteLine($"LoaadData: Loaded all organizations. Count: {Organizations.Count}");
             IsAdmin = true;
         }
         else
         {
             Organizations = await OrganizationService.GetOrganizationsByUserIdAsync(currentUser.Id);
-            Console.WriteLine($"LoaadData: Loaded organizations for user. Count: {Organizations.Count}");
         }
 
         if (currentOrganizationId.HasValue)
@@ -379,21 +373,18 @@
             if (IsAdmin)
             {
                 Projects = await ProjectService.GetProjectsByOrganizationIdAsync(currentOrganizationId.Value);
-                Console.WriteLine($"LoaadData: Loaded all projects for org {currentOrganizationId.Value}. Count: {Projects.Count}");
             }
             else
             {
                 Projects = await ProjectService.GetProjectsByOrganizationIdAsync(currentOrganizationId.Value);
-                Console.WriteLine($"LoaadData: Loaded projects for org {currentOrganizationId.Value} and user {currentUser.Id}. Count: {Projects.Count}");
             }
         }
         else
         {
-            Console.WriteLine("LoaadData: No current organization id set, skipping project load.");
+            Console.WriteLine("No current organization id set, skipping project load.");
         }
 
         await InvokeAsync(StateHasChanged);
-        Console.WriteLine("LoaadData: Finished loading data");
         IsLoading = false;
     }
 

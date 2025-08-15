@@ -313,7 +313,6 @@ OpenOnFirstRender="true">
 
                             switch (termCategory)
                             {
-// Replace the selected code block with the following:
 
                                 case 0: // Protein ID
                                     foreach (var protein in Article.ProteinData
@@ -486,8 +485,8 @@ OpenOnFirstRender="true">
                         }
                     </div>
                 </div>
-                                }
-                                else
+                }
+                else
                 {
                     <p>No full text available.</p>
                 }
@@ -665,7 +664,7 @@ OpenOnFirstRender="true">
 
     // Highlighting system
     private string searchTerm = "";
-    private int termCategory = -1; // Can be used to filter highlights by category if needed
+    private int termCategory = -1; 
     private int currentHighlightIndex = -1;
     private List<ChapterDisplay> processedChapters = new();
     private int highlightCount = 0;
@@ -682,11 +681,16 @@ OpenOnFirstRender="true">
             var project = await DatabaseDataHandler.GetByIdAsync<Project>(ArticlePerProject.ProjectId);
 
             //if project is in otherProjectsProteinData, remove it (check by project.Id))
-            if (otherProjectsProteinData.Keys.Select(p=>p.Id).ToList().Contains(project.Id))
+            if (project != null && otherProjectsProteinData.Keys.Select(p => p.Id).ToList().Contains(project.Id))
             {
                 otherProjectsProteinData = otherProjectsProteinData
                     .Where(kvp => kvp.Key.Id != project.Id)
                     .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            }
+            else
+            {
+                // Handle the case where the project is null
+                Console.WriteLine("Project not found for the given ProjectId.");
             }
             currentUser = await UserManager.GetUserAsync((await AuthenticationStateProvider.GetAuthenticationStateAsync()).User);
 
@@ -772,7 +776,8 @@ OpenOnFirstRender="true">
         catch (Exception ex)
         {
             // Handle conversion errors
-            Console.WriteLine($"Error converting PDF to HTML: {ex}");
+            isLoading = false;
+            await JSRuntime.InvokeVoidAsync("alert",$"Error converting PDF to HTML: {ex}");
         }
     }
 
@@ -873,8 +878,6 @@ OpenOnFirstRender="true">
             )
             .ToList();
 
-        //remove previously saved proteins
-        await ProteinDataPerProjectService.DeleteProteinDataByProjectIdAndArticleDoiAsync(ArticlePerProject.ProjectId, Article.Doi);
 
         int afterFilter = Article.ProteinData.Count;
         Console.WriteLine($"[LOOP] Filtered protein data for DOI={Article.Doi}: {beforeFilter} -> {afterFilter} records");
@@ -1240,15 +1243,6 @@ OpenOnFirstRender="true">
 
         if (ArticlePerProject == null) return;
 
-
-        //print parameters
-        Console.WriteLine($"Completing article: {Article.Title}");
-        Console.WriteLine($"Project ID: {ArticlePerProject.ProjectId}");
-        Console.WriteLine($"Article DOI: {Article.Doi}");
-        Console.WriteLine($"Approved by: {currentUser.UserName} ({currentUser.Id})");
-        Console.WriteLine($"Discredited: {ArticlePerProject.IsDiscredited}");
-        Console.WriteLine($"Discredited Reason: {ArticlePerProject.DiscreditedReason}");
-
         await ArticlePerProjectService.CompleteArticlePerProjectByIdArticleDoiAndProjectIdAsync(Article.Doi,ArticlePerProject.ProjectId,ArticlePerProject.Article.ProteinData.ToList(),currentUser.Id);
 
         ArticlePerProject.IsDiscredited = false;
@@ -1262,13 +1256,12 @@ OpenOnFirstRender="true">
         await Close();
     }
 
-    //public EventCallback<(int index, string proteinId, double value)> OnConversionConfirmed { get; set; }
     private void ConvertValue(int proteinId, int index, double value)
     {
        var protein = Article.ProteinData.FirstOrDefault(p => p.Id == proteinId);
         if (protein == null) return;
 
-        double convertedValue = value; // Replace with actual conversion logic
+        double convertedValue = value;
         // Update the protein data
         switch (index)
         {

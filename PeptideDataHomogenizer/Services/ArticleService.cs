@@ -27,7 +27,7 @@ namespace PeptideDataHomogenizer.Services
 
         public async Task AddArticlesWithoutChapters(List<Article> articles)
         {
-            _context.ChangeTracker.Clear(); // Clear the change tracker to avoid tracking issues
+            _context.ChangeTracker.Clear();
             _context.Set<Article>().AddRange(articles);
             await _context.SaveChangesAsync();
         }

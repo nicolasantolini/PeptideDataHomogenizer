@@ -21,6 +21,9 @@
 @inject UserProjectService UsersPerProjectService
 @inject ProteinDataPerProjectService ProteinDataPerProjectService
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 <h3 class="mb-4">PubMed Article Browser</h3>
 
 @if (isRenderingPage)
@@ -309,8 +312,7 @@ else
                 Console.WriteLine($"OnAfterRenderAsync: setting pageSize from State.PageSize = {State.PageSize}");
                 pageSize = State.PageSize;
             }
-
-            if (State.PageNr == 0)
+            else if (State.PageNr == 0)
             {
                 Console.WriteLine("OnAfterRenderAsync: State.PageNr is 0, setting to 1");
                 State.PageNr = 1;
@@ -533,7 +535,6 @@ else
 <style>
    
 
-   /* Table hover */
    .clickable-row {
        cursor: pointer;
        transition: background-color 0.2s;

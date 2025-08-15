@@ -12,7 +12,6 @@ namespace PeptideDataHomogenizer.Services
             _context = context;
         }
 
-        //getuserbyregistrationtokenasync
         public async Task<ApplicationUser> GetUserByRegistrationTokenAsync(long registrationToken)
         {
             return await _context.Set<ApplicationUser>()

@@ -6,10 +6,12 @@
 @inject DatabaseDataHandler DatabaseDataHandler
 @inject ProjectService ProjectService
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @rendermode InteractiveServer
 
 <style>
-    /* Keep existing styles, they're good */
     .context-header-bar {
         display: flex;
         align-items: center;
@@ -118,8 +120,8 @@
     {
         if (firstRender)
         {
-            //wait 8 seconds to ensure the context is set
-            await Task.Delay(2500);
+            //wait 3 seconds to ensure the context is set
+            await Task.Delay(3000);
             await RefreshContextAsync();
         }
     }

@@ -24,7 +24,6 @@ namespace PeptideDataHomogenizer.Services
                 .ToListAsync();
         }
 
-        //isuserinorganization
         public async Task<bool> IsUserInOrganizationAsync(string userId, int organizationId)
         {
             return await _context.Set<UsersPerOrganization>()
@@ -40,7 +39,6 @@ namespace PeptideDataHomogenizer.Services
                 .ToListAsync();
         }
 
-        //getrolebyorganizationidanduserid
         public async Task<string> GetRoleByOrganizationIdAndUserIdAsync(int organizationId, string userId)
         {
             var userOrganization = await _context.Set<UsersPerOrganization>()
@@ -77,7 +75,6 @@ namespace PeptideDataHomogenizer.Services
             }
         }
 
-        //getusersperprojectbylistofuserids
         public async Task<List<UsersPerOrganization>> GetUsersPerOrganizationByListOfUserIdsAsync(List<string> userIds)
         {
             if (userIds == null || !userIds.Any())
@@ -90,7 +87,6 @@ namespace PeptideDataHomogenizer.Services
                 .ToListAsync();
         }
 
-        //remove user from all organizations
         public async Task RemoveUserFromAllOrganizationsAsync(string userId)
         {
             _context.ChangeTracker.Clear();

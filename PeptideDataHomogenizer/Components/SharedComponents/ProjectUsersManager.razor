@@ -310,7 +310,6 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        Console.WriteLine("component:"+UserRole);
         await LoadOrganizations();
         await LoadProjectUsers();
         if (Organizations.Any(o => o.Id == CurrentProject.OrganizationId))
@@ -368,7 +367,7 @@
                 ProjectUsers.Add(new ProjectUser
                 {
                     User = user,
-                    Role = role // Default role for project users
+                    Role = role 
                 });
             }
         }

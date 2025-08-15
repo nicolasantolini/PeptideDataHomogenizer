@@ -82,7 +82,7 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
             // Filter by keywords
             var filteredImages = FilterImagesByKeywords(distinctImages, baseUrl);
 
-            // Special filtering for MDPI
+            // Special filtering for MDPI (remove duplicates)
             if (baseUrl.Contains("mdpi.com"))
             {
                 var filteredSrcs = FilterFirstVersions(filteredImages.Select(i => i.Src).ToList());
@@ -289,15 +289,12 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
 
         private async Task<List<ImageHolder>> ProcessAndSaveImagesAsync(List<ImageInfo> imageInfos, string baseUrl)
         {
-            var wwwrootPath = Path.Combine(WebHostEnvironment.WebRootPath, "imagesTemp");
-            Directory.CreateDirectory(wwwrootPath);
-
             var results = new List<ImageHolder>();
             foreach (var imageInfo in imageInfos)
             {
                 try
                 {
-                    var imageHolder = await DownloadAndSaveImageAsync(imageInfo, baseUrl, wwwrootPath);
+                    var imageHolder = await DownloadAndSaveImageAsync(imageInfo, baseUrl);
                     if (imageHolder != null)
                     {
                         results.Add(imageHolder);
@@ -311,7 +308,7 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
             return results;
         }
 
-        private async Task<ImageHolder> DownloadAndSaveImageAsync(ImageInfo imageInfo, string baseUrl, string savePath)
+        private async Task<ImageHolder> DownloadAndSaveImageAsync(ImageInfo imageInfo, string baseUrl)
         {
             var imageUrl = GetAbsoluteImageUrl(imageInfo.Src, baseUrl);
             if (string.IsNullOrEmpty(imageUrl)) return null;
@@ -422,7 +419,7 @@ namespace PeptideDataHomogenizer.Tools.HtmlTools
                 // Special handling for MDPI image URLs
                 if (baseUrl.Contains("mdpi.com"))
                 {
-                    // Original behavior - simple URI combination
+                    // Simple URI combination
                     return new Uri(new Uri(baseUrl), src).AbsoluteUri;
                 }
 

@@ -16,34 +16,6 @@ namespace PeptideDataHomogenizer.Services
             _environment = webHostEnvironment;
         }
 
-        /*
-         * public class DiscreditedJournal
-    {
-        [Key]
-        [Column("id")]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public int Id { get; set; }
-
-        [Column("title")]
-        [MaxLength(255)]
-        public string Title { get; set; }
-
-        [ForeignKey("project")]
-        [Column("project_id")]
-        public int ProjectId { get; set; }
-        public Project Project { get; set; }
-
-        [Column("discredited_reason")]
-        [MaxLength(1000)]
-        public string DiscreditedReason { get; set; } = string.Empty;
-
-        [Column("discredited_by")]
-        [MaxLength(255)]
-        public string DiscreditedById { get; set; } = string.Empty;
-
-    }
-         */
-
 
         public async Task<List<DiscreditedJournal>> GetDiscreditedJournalsAsync(int projectId)
         {
@@ -52,7 +24,6 @@ namespace PeptideDataHomogenizer.Services
                 .ToListAsync();
         }
 
-        //update or insert a discredited journal match on title and project id
         public async Task<DiscreditedJournal> UpsertDiscreditedJournalAsync(DiscreditedJournal discreditedJournal)
         {
             var existingJournal = await _context.DiscreditedJournals

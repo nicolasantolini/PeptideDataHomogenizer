@@ -2,9 +2,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-#####################
-# PUPPETEER RECIPE - IMPROVED
-#####################
 RUN apt-get update && \
     apt-get install -y wget gnupg && \
     wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg && \
@@ -19,7 +16,7 @@ RUN ls -la /usr/bin/google-chrome* && \
 
 ENV PUPPETEER_EXECUTABLE_PATH="/usr/bin/google-chrome"
 
-# Rest of build stage...
+# Rest of build stage
 COPY ["PeptideDataHomogenizer.sln", "."]
 COPY ["Entities/Entities.csproj", "Entities/"]
 COPY ["PeptideDataHomogenizer/PeptideDataHomogenizer.csproj", "PeptideDataHomogenizer/"]
@@ -35,7 +32,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Install Chrome and dependencies - FINAL WORKING VERSION
+# Install Chrome and dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gnupg \
@@ -97,6 +94,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_EXECUTABLE_PATH="/usr/bin/google-chrome"
-ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV EnvironmentVariables__WileyAPIKey=27687327-2ab6-489e-9efb-350133f42584
+
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "PeptideDataHomogenizer.dll"]

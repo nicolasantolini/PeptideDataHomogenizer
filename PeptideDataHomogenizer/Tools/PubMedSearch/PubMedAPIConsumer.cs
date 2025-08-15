@@ -106,18 +106,13 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
             if (!string.IsNullOrEmpty(apiKey))
                 parameters["api_key"] = apiKey;
 
-            //print request uri
-            Console.WriteLine($"PubMed API request: {BaseUrl}esearch.fcgi?{BuildQuery(parameters)}");
-
             var response = await ExecuteWithRetry(() =>
                 _http.GetAsync($"esearch.fcgi?{BuildQuery(parameters)}"));
 
-            Console.WriteLine($"PubMed API response: {response.RequestMessage.RequestUri}");
 
             using var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
             var result = doc.RootElement.GetProperty("esearchresult");
 
-            Console.WriteLine($"PubMed API result: {result}");
 
             var totalCount = Convert.ToInt32(result.GetProperty("count").GetString());
             var ids = result.GetProperty("idlist").EnumerateArray()

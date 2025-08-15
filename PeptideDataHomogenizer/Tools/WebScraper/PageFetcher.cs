@@ -69,7 +69,7 @@ public class PageFetcher : IPageFetcher, IDisposable
                         {
                             var extra = new PuppeteerExtra();
                             extra.Use(new StealthPlugin());
-                            await new BrowserFetcher().DownloadAsync();
+                            //await new BrowserFetcher().DownloadAsync(); 
                             var browser = await extra.LaunchAsync(new LaunchOptions
                             {
                                 Headless = true,
@@ -135,7 +135,7 @@ public class PageFetcher : IPageFetcher, IDisposable
             using var page = await _sharedBrowser.NewPageAsync();
             await page.SetUserAgentAsync(RandomUserAgentGenerator.GetRandomUserAgent());
 
-            // Configure request interception (optional)
+            // Configure request interception
             await page.SetRequestInterceptionAsync(true);
             page.Request += (sender, e) =>
             {
@@ -145,12 +145,12 @@ public class PageFetcher : IPageFetcher, IDisposable
                     e.Request.ContinueAsync();
             };
 
-            // Navigate with timeout (fallback to WaitUntil.Load if Networkidle0 hangs)
+            // Navigate with timeout 
             try
             {
                 await page.GoToAsync(url, new NavigationOptions
                 {
-                    WaitUntil = new[] { WaitUntilNavigation.Load }, // More reliable than Networkidle0
+                    WaitUntil = new[] { WaitUntilNavigation.Load }, 
                     Timeout = 60000 // 60s timeout
                 });
             }
@@ -170,7 +170,7 @@ public class PageFetcher : IPageFetcher, IDisposable
             var discreditedPublishers = await _discreditedPublisherService.GetDiscreditedPublishersAsync(projectId);
 
 
-            // Route to Elsevier/Wiley or generic scraper
+            // Discard if the URL matches any discredited publisher, otherwise proceed with extraction
             var finalUrl = page.Url;
             if (discreditedPublishers.Any(dp => finalUrl.Contains(dp.Url, StringComparison.OrdinalIgnoreCase)))
             {
@@ -184,10 +184,13 @@ public class PageFetcher : IPageFetcher, IDisposable
                 };
 
             }
+            // Check for Elsevier article
             else if(finalUrl.StartsWith("https://www.sciencedirect.com")){
                 (chapters,tables,images) = await _elsevierArticleFetcher.GetFullTextByDoi(url.Replace("https://doi.org/", ""));}
+            // Check for Wiley article
             else if (finalUrl.StartsWith("https://onlinelibrary.wiley.com/"))
                 (chapters, tables, images) = await _wileyArticleDownloader.DownloadArticleAsync(url, title);
+            // Rest of the URLs are processed by retrieving the HTML content of the page
             else
             {
                 var content = await page.GetContentAsync();

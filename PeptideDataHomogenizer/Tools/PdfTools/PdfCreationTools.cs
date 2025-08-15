@@ -36,7 +36,7 @@ namespace PeptideDataHomogenizer.Tools.PdfTools
             {
                 if (File.Exists(randomOutputPath))
                 {
-                    try { File.Delete(randomOutputPath); } catch { /* Ignore deletion errors */ }
+                    try { File.Delete(randomOutputPath); } catch { }
                 }
             }
         }

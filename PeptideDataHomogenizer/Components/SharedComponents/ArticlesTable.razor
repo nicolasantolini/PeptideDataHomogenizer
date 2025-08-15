@@ -28,8 +28,7 @@ else{
             <strong>@articlesWithValidFullText</strong> out of <strong>@totalArticles</strong> articles 
             have valid full text (<strong>@proportion.ToString("0.00")%</strong>).
         </p>
-        //article with protein records
-            var articlesWithProteinRecords = ArticlesPerProject.Count(article => article.Article.ProteinData != null && article.Article.ProteinData.Any());
+        var articlesWithProteinRecords = ArticlesPerProject.Count(article => article.Article.ProteinData != null && article.Article.ProteinData.Any());
         var proportionWithProteinRecords = (double)articlesWithProteinRecords / totalArticles * 100;
         <p class="alert alert-info">
             <strong>@articlesWithProteinRecords</strong> out of <strong>@totalArticles</strong> articles 
@@ -146,7 +145,6 @@ else{
 
     protected override async Task OnParametersSetAsync()
     {
-        //print chapters per article
         if (ArticlesPerProject == null || !ArticlesPerProject.Any())
         {
             return; // No articles to display
@@ -192,10 +190,6 @@ else{
 
         selectedArticle = article;
         selectedArticle.Chapters = article.Chapters;
-        //print chapter count for both
-        Console.WriteLine($"Selected Article: {article.Title}, Chapters Count: {article.Chapters?.Count ?? 0}");
-
-
     }
 
     private async Task HandleModalStateChange(bool isOpen)

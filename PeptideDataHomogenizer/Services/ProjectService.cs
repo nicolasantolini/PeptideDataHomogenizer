@@ -16,7 +16,6 @@ namespace PeptideDataHomogenizer.Services
             _environment = webHostEnvironment;
         }
 
-        //GetProjectsByOrganizationIdAsync
         public async Task<List<Project>> GetProjectsByOrganizationIdAsync(int organizationId)
         {
             return await _context.Set<Project>()
@@ -31,29 +30,12 @@ namespace PeptideDataHomogenizer.Services
                 .ToListAsync();
         }
 
-        //getprojectbyorganizationid,projectname, logopath, description
         public async Task<Project> GetProjectMatchAsync(int organizationId, string projectName,string description)
         {
             return await _context.Set<Project>()
                 .FirstOrDefaultAsync(p => p.OrganizationId == organizationId && p.Name == projectName && p.Description == description);
         }
 
-        /*
-         * Implement a method to uopdate a project like this:
-         * public async Task UpdateOrganizationAsync(Organization organization, IBrowserFile logoFile = null)
-        {
-            if (logoFile != null && logoFile.Size > 0)
-            {
-                if (!string.IsNullOrEmpty(organization.LogoPath))
-                {
-                    DeleteLogo(organization.LogoPath);
-                }
-                organization.LogoPath = await SaveLogoAsync(logoFile);
-            }
-            _dbContext.Organizations.Update(organization);
-            await _dbContext.SaveChangesAsync();
-        }
-         */
 
         public async Task UpdateProjectAsync(Project project)
         {

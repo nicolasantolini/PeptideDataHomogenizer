@@ -76,15 +76,6 @@ namespace PeptideDataHomogenizer.Tools.PubMedSearch
                     .Select(id => id.GetString())
                     .ToList();
 
-            //print all ids
-            foreach ( var id in ids )
-                Console.WriteLine(id);
-
-            //ids = await FilterArticleIdsApprovedOrDiscredited(ids.Where(id => id != null).ToList());
-
-            Console.WriteLine("post filter:");
-            foreach ( var id in ids )
-                Console.WriteLine(id);
             var articles = new List<ArticleDetail>();
             articles.AddRange(await GetArticlesDetailAsync(ids, db));
 

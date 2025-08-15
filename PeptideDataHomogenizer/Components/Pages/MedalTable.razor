@@ -12,6 +12,9 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @inject IJSRuntime JSRuntime
 
 
@@ -93,6 +96,7 @@ else{
             if (projectId == null || currentUser == null)
             {
                 // Handle the case where projectId or currentUser is not set
+                await JSRuntime.InvokeVoidAsync("alert", "There was en error loading the page. Please contact the assistance.");
                 return;
             }
 
@@ -104,7 +108,7 @@ else{
             medalCategories.Add(new MedalCategory
             {
                 Name = "Protein Extractor",
-                CompletionPercentage = CalculateCompletionPercentage(approvedProteinsCount, 500), // Assuming 100 is the max for this category
+                CompletionPercentage = CalculateCompletionPercentage(approvedProteinsCount, 5000), 
                 Medals = new List<Medal>
         {
             new Medal
@@ -134,7 +138,7 @@ else{
             medalCategories.Add(new MedalCategory
             {
                 Name = "Discredited Items",
-                CompletionPercentage = CalculateCompletionPercentage(totalDiscreditedItemsCount, 100), // Assuming 100 is the max for this category
+                CompletionPercentage = CalculateCompletionPercentage(totalDiscreditedItemsCount, 100), 
                 Medals = new List<Medal>
             {
                 new Medal

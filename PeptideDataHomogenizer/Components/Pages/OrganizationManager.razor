@@ -11,10 +11,12 @@
 
 <PageTitle>Organizations</PageTitle>
 
-<h3 class="mb-4">Organizations</h3>
-<small class="text-muted">
-    Page reserved to admins. Make sure you are allowed to be here.
-</small>
+<div class="org-title-container mb-4 d-flex align-items-end gap-2">
+    <h3 class="org-title mb-0">Organizations</h3>
+    <span class="org-subtitle text-muted ms-2">
+        Page reserved to admins. Make sure you are allowed to be here.
+    </span>
+</div>
 
 @if (isRenderingPage)
 {
@@ -91,7 +93,6 @@ else{
                             <div class="mb-3">
                                 <label class="form-label">Organization Logo</label>
                                 <div class="border rounded p-3 text-center">
-                                    <!-- Inside the modal-body section, replace the logo preview part -->
                                     <div class="mb-3 d-flex justify-content-center">
                                         @if (!string.IsNullOrEmpty(LogoPreviewUrl))
                                         {
@@ -323,7 +324,7 @@ else{
 
     public void Dispose()
     {
-        // Clean up if needed
+        
     }
 
 

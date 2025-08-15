@@ -2,16 +2,10 @@
 using Entities.RegexData;
 using Microsoft.AspNetCore.Mvc;
 using PeptideDataHomogenizer.Data;
-using PeptideDataHomogenizer.Data.State;
 using PeptideDataHomogenizer.Services;
 using PeptideDataHomogenizer.Tools.HtmlTools;
-using PeptideDataHomogenizer.Tools.NotCurrentlyInUse;
 using PeptideDataHomogenizer.Tools.PubMedSearch;
 using PeptideDataHomogenizer.Tools.RegexExtractors;
-using System;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Text.Json;
 using static PeptideDataHomogenizer.Components.Pages.Home;
 
 namespace PeptideDataHomogenizer.Tools
@@ -25,7 +19,6 @@ namespace PeptideDataHomogenizer.Tools
     {
         private readonly IPageFetcher _pageFetcher;
         private readonly IEUtilitiesService _eUtilitiesService;
-        private readonly PythonRegexProteinDataExtractor _pythonRegexProteinDataExtractor;
         private readonly DatabaseDataHandler _databaseDataHandler;
         private readonly IPubMedAPIConsumer _pubMedAPIConsumer;
         private readonly PDBRecordsExtractor _pdbRecordsExtractor;
@@ -40,7 +33,7 @@ namespace PeptideDataHomogenizer.Tools
         private readonly JournalsService _journalsService;
 
 
-        public FullArticleDownloader([FromServices] IPageFetcher pageFetcher, [FromServices] IEUtilitiesService eUtilitiesService, [FromServices] PythonRegexProteinDataExtractor pythonRegexProteinDataExtractor, [FromServices] DatabaseDataHandler databaseDataHandler,[FromServices] IPubMedAPIConsumer pubMedAPIConsumer, [FromServices] PDBRecordsExtractor pDBRecordsExtractor,[FromServices] PDBContextDataExtractor pdbContextDataExtractor, [FromServices] ArticleService articleService, [FromServices] ArticleContentService articleContentService,
+        public FullArticleDownloader([FromServices] IPageFetcher pageFetcher, [FromServices] IEUtilitiesService eUtilitiesService, [FromServices] DatabaseDataHandler databaseDataHandler,[FromServices] IPubMedAPIConsumer pubMedAPIConsumer, [FromServices] PDBRecordsExtractor pDBRecordsExtractor,[FromServices] PDBContextDataExtractor pdbContextDataExtractor, [FromServices] ArticleService articleService, [FromServices] ArticleContentService articleContentService,
             [FromServices] ArticleModerationService articleModerationService,
             [FromServices] ProteinDataService proteinDataService,
             [FromServices]ArticlePerProjectService articlePerProjectService,
@@ -49,7 +42,6 @@ namespace PeptideDataHomogenizer.Tools
         {
             _pageFetcher = pageFetcher;
             _eUtilitiesService = eUtilitiesService;
-            _pythonRegexProteinDataExtractor = pythonRegexProteinDataExtractor;
             _databaseDataHandler = databaseDataHandler;
             _pubMedAPIConsumer = pubMedAPIConsumer;
             _pdbRecordsExtractor = pDBRecordsExtractor;
@@ -170,9 +162,7 @@ namespace PeptideDataHomogenizer.Tools
 
         private async Task<List<Article>> ProcessFullTextArticles(List<Article> existingArticles, List<Article> newArticles, int projectId)
         {
-            Console.WriteLine($"[DEBUG] existingArticles.Count before FilterListOfArticlesByNotApprovedAndNotDiscreditedAsync: {existingArticles.Count}");
             var existingArticleNeedingTexDois = await _articlePerProjectService.FilterListOfArticlesByNotApprovedAndNotDiscreditedAsync(projectId, existingArticles.Select(a => a.Doi).ToList());
-            Console.WriteLine($"[DEBUG] existingArticleNeedingTexDois.Count after FilterListOfArticlesByNotApprovedAndNotDiscreditedAsync: {existingArticleNeedingTexDois.Count}");
             // Filter existing articles that need full text, only take those doi is in existingArticleNeedingTextDois
             var existingArticlesNeedingText = existingArticles
                 .Where(a => existingArticleNeedingTexDois.Contains(a.Doi) && (a.Chapters == null || a.Chapters.Count == 0))
@@ -313,11 +303,8 @@ namespace PeptideDataHomogenizer.Tools
             forceFieldsFromSavedData = forceFieldsFromSavedData.Distinct().ToList();
             methodsFromSavedData = methodsFromSavedData.Distinct().ToList();
             ionsFromSavedData = ionsFromSavedData.Distinct().ToList();
+
             //create knowledge base
-
-
-
-
             return new KnowledgeBase
             {
                 SoftwareNames = simulationSoftwares.Select(x => x.SoftwareName).ToList(),

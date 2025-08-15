@@ -11,6 +11,9 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserManager<ApplicationUser> UserManager
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @inject IJSRuntime JSRuntime
 
 @rendermode InteractiveServer
@@ -563,7 +566,7 @@
                 currentWaterModel = new WaterModel();
                 break;
             case IonType:
-                currentIon = new Ion(); // Initialize Ion if needed
+                currentIon = new Ion();
                 break;
         }
 
@@ -593,8 +596,8 @@
                 currentWaterModel = wm;
                 break;
             case Ion ion:
-                currentEntityType = IonType; // Set to Ion type if needed
-                currentIon = ion; // Initialize Ion if needed
+                currentEntityType = IonType;
+                currentIon = ion;
                 break;
         }
         modalTitle = $"Edit {item?.GetType().Name ?? "Entity"}";
@@ -621,7 +624,7 @@
                 itemToDeleteName = wm.WaterModelName;
                 break;
             case Ion ion:
-                itemToDeleteName = ion.IonName; // Assuming Ion has a property IonName
+                itemToDeleteName = ion.IonName;
                 break;
             default:
                 itemToDeleteName = "Unknown";
@@ -654,7 +657,7 @@
                 await DatabaseDataHandler.DeleteAsync((WaterModel)itemToDelete);
                 break;
             case IonType:
-                await DatabaseDataHandler.DeleteAsync((Ion)itemToDelete); // Assuming Ion has a Delete method
+                await DatabaseDataHandler.DeleteAsync((Ion)itemToDelete);
                 break;
         }
 
@@ -694,13 +697,12 @@
                 break;
             case IonType:
                 if (isEditing)
-                    await DatabaseDataHandler.UpdateAsync(currentIon); // Assuming Ion has an Update method
+                    await DatabaseDataHandler.UpdateAsync(currentIon);
                 else
-                    await DatabaseDataHandler.AddAsync(currentIon); // Assuming Ion has an Add method
+                    await DatabaseDataHandler.AddAsync(currentIon);
                 break;
         }
 
-        //print operation log to console
         await LoadAllData();
         CloseModal();
     }

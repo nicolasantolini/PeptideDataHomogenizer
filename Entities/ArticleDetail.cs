@@ -32,18 +32,18 @@ namespace Entities
         public string Id { get; set; }
         public string Title { get; set; }
         public string Abstract { get; set; }
-        public List<Chapter> FullText { get; set; } // Not directly available in XML; could be fetched separately
+        public List<Chapter> FullText { get; set; } 
         public string DOI { get; set; }
         public string PMID { get; set; }
         public List<AuthorInfo> Authors { get; set; }
         public JournalInfo Journal { get; set; }
         public Dictionary<string, string> Links { get; set; }
         public List<ProteinData> ProteinRecords { get; set; } = new List<ProteinData>();
-        public DateTime? PubDate { get; set; } // New property for publication date
+        public DateTime? PubDate { get; set; }
 
         public static ArticleDetail FromXml(XElement articleXml)
         {
-            // Helper to parse month (can be numeric or abbreviated)
+            // Helper to parse month
             int ParseMonth(string month)
             {
                 if (int.TryParse(month, out int m))

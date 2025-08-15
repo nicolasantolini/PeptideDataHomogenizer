@@ -16,34 +16,6 @@ namespace PeptideDataHomogenizer.Services
             _environment = webHostEnvironment;
         }
 
-        /*
-         * public class DiscreditedPublisher
-    {
-        [Key]
-        [Column("id")]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public int Id { get; set; }
-
-        [Column("url")]
-        [MaxLength(255)]
-        public string url { get; set; }
-
-        [ForeignKey("project")]
-        [Column("project_id")]
-        public int ProjectId { get; set; }
-        public Project Project { get; set; }
-
-        [Column("discredited_reason")]
-        [MaxLength(1000)]
-        public string DiscreditedReason { get; set; } = string.Empty;
-
-        [Column("discredited_by")]
-        [MaxLength(255)]
-        public string DiscreditedById { get; set; } = string.Empty;
-
-    }
-         */
-
 
         public async Task<List<DiscreditedPublisher>> GetDiscreditedPublishersAsync(int projectId)
         {
@@ -52,7 +24,6 @@ namespace PeptideDataHomogenizer.Services
                 .ToListAsync();
         }
 
-        //update or insert a discredited publisher match on url and project id
         public async Task<DiscreditedPublisher> UpsertDiscreditedPublisherAsync(DiscreditedPublisher discreditedPublisher)
         {
             var existingPublisher = await _context.DiscreditedPublishers

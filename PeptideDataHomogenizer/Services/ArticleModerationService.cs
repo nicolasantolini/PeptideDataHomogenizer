@@ -13,10 +13,8 @@ namespace PeptideDataHomogenizer.Services
             _context = context;
         }
 
-        //discreditarticlesbyjournalandprojectid
         public async Task DiscreditArticlesByJournalAndProjectIdAsync(string journal, int projectId)
         {
-            // Replace the problematic line in DiscreditArticlesByJournalAndProjectIdAsync
             var articles = await _context.ArticlePerProjects
                 .Where(a => a.ProjectId == projectId &&
                             a.Article.Journal.ToLower() == journal.ToLower() &&
@@ -35,7 +33,6 @@ namespace PeptideDataHomogenizer.Services
         }
 
 
-        //discredit article in project
         public async Task DiscreditArticleInProjectAsync(int projectId, string articleId, string discreditedReason)
         {
             var articlePerProject = await _context.ArticlePerProjects
@@ -85,17 +82,6 @@ namespace PeptideDataHomogenizer.Services
 
                 var images = await _context.Set<ImageHolder>().Where(i => i.ArticleDoi == articleId).ToListAsync();
                 _context.Set<ImageHolder>().RemoveRange(images);
-                //foreach (var image in images)
-                //{
-                //    if (!string.IsNullOrEmpty(image.ImagePath))
-                //    {
-                //        var imagePath = Path.Combine(Directory.GetCurrentDirectory(), image.ImagePath);
-                //        if (File.Exists(imagePath))
-                //        {
-                //            File.Delete(imagePath);
-                //        }
-                //    }
-                //}
 
                 var tables = await _context.Set<ExtractedTable>().Where(t => t.ArticleDoi == articleId).ToListAsync();
                 _context.Set<ExtractedTable>().RemoveRange(tables);
@@ -105,7 +91,6 @@ namespace PeptideDataHomogenizer.Services
             await _context.SaveChangesAsync();
         }
 
-        //getdiscreditedarticlescountbyprojectidanduserid
         public async Task<int> GetDiscreditedArticlesCountByProjectIdAndUserIdAsync(int projectId,string userId)
         {
             return await _context.ArticlePerProjects

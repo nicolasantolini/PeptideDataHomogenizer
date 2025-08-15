@@ -16,6 +16,9 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject NavigationManager NavigationManager
 
+@inject ContextCookieManager ContextCookieManager
+@inject ProjectCookieManager ProjectCookieManager
+
 @implements IDisposable
 @rendermode InteractiveServer
 
@@ -72,7 +75,6 @@ else
                 @code{
             private async Task LeaveProject(int projectId)
             {
-                //js confirm
                 var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to leave this project?");
                 if (!confirmed)
                     return;
@@ -378,6 +380,6 @@ else
 
     public void Dispose()
     {
-        // Clean up if needed
+        
     }
 }

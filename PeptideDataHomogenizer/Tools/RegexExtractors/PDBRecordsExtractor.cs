@@ -9,9 +9,6 @@ using System.Threading.Tasks;
 
 namespace PeptideDataHomogenizer.Tools.RegexExtractors
 {
-
-
-    // Register this class as Singleton in DI: services.AddSingleton<PDBRecordsExtractor>();
     public class PDBRecordsExtractor
     {
         private readonly DatabaseDataHandler _databaseDataHandler;
@@ -50,7 +47,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                     "protein id", "accession code", "structure"
                 };
 
-            var pdbPattern = @"(?ix)  # Verbose mode for readability and ignore case
+            var pdbPattern = @"(?ix)  
                 # Pattern 1: Multiple IDs (must come first)
                 \b(?:PDB\s+(?:ID\s+)?codes?|IDs?)\s+((?:[0-9][A-Z0-9]{3}\s*(?:,|and|&)?\s*)+)\b |
 
@@ -115,12 +112,9 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 }
             }
 
-            // Find all software and water models in the text
             var softwareSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var softwareVersionDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var waterModelSet = new HashSet<(string, string)>(new TupleComparer());
-
-            
             var forceFieldSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var simulationMethodSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var temperaturesSet = new HashSet<double>();
@@ -234,7 +228,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                         temperaturesSet.Add(temp);
                     }
                 }
-                //sort the temperatures in ascending order
+
                 temperaturesSet = temperaturesSet.OrderBy(t => t).ToHashSet();
 
                 var ionsAndConcentrations = FindIonsAndConcentrationsAsync(sentence, KnownIons);
@@ -591,7 +585,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
             return results.ToList();
         }
 
-        // Helper to avoid duplicates (remains the same)
+        // Helper to avoid duplicates
         private class ForceFieldSoftwareComparer : IEqualityComparer<ForceFieldSoftware>
         {
             public bool Equals(ForceFieldSoftware x, ForceFieldSoftware y)
@@ -653,7 +647,7 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
                 return temperatures;
             }
 
-            // Updated regex pattern: requiring that after "K" no letter follows (so "kJ" won't count)
+            // Regex pattern: requiring that after "K" no letter follows (so "kJ" won't count)
             var pattern = @"(?:^|[\s,;])(\d+\.\d+|\d+)(?=\s*K(?![A-Za-z]))";
             var matches = Regex.Matches(sentence, pattern, RegexOptions.IgnoreCase);
 
@@ -686,73 +680,6 @@ namespace PeptideDataHomogenizer.Tools.RegexExtractors
 
             return temperatures;
         }
-
-        /// <summary>
-        /// Finds known ions and their concentrations in a sentence, converting all concentration values to mM (millimolar)
-        /// </summary>
-        /// <param name="sentence">The text to search</param>
-        /// <returns>A list of tuples containing ion name and concentration in mM</returns>
-        //public List<(string, double)> FindIonsAndConcentrationsAsync(string sentence, List<string> knownIons)
-        //{
-        //    var result = new List<(string, double)>();
-
-        //    // Find all ions in the sentence
-        //    var ionMatches = new List<(string Ion, int Position, int Length)>();
-        //    foreach (var ion in knownIons)
-        //    {
-        //        var pattern = $@"\b{Regex.Escape(ion)}\b";
-        //        foreach (Match match in Regex.Matches(sentence, pattern, RegexOptions.IgnoreCase))
-        //        {
-        //            ionMatches.Add((ion, match.Index, match.Length));
-        //        }
-        //    }
-
-        //    if (!ionMatches.Any())
-        //        return result;
-
-        //    // Find all concentration values with units
-        //    var concentrationPattern = @"(\d+\.?\d*)\s*(µ|u|m|n|p)?(M)(?!\w)";
-        //    var concentrationMatches = new List<(double Value, string Unit, int Position)>();
-
-        //    foreach (Match match in Regex.Matches(sentence, concentrationPattern, RegexOptions.IgnoreCase))
-        //    {
-        //        if (double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
-        //        {
-        //            string unit = match.Groups[2].Success ? match.Groups[2].Value.ToLower() : "";
-
-        //            // Convert to mM (millimolar) based on unit prefix
-        //            double convertedValue = unit switch
-        //            {
-        //                "µ" or "u" => value / 1000,        // µM (micromolar) to mM (divide by 1000)
-        //                "m" => value,                      // mM (millimolar) - keep as is
-        //                "" => value * 1000,                // M (molar) to mM (multiply by 1000)
-        //                "n" => value / 1000000,            // nM (nanomolar) to mM (divide by 1,000,000)
-        //                "p" => value / 1000000000,         // pM (picomolar) to mM (divide by 1,000,000,000)
-        //                _ => value                         // Default case
-        //            };
-
-        //            concentrationMatches.Add((convertedValue, unit + "M", match.Index));
-        //        }
-        //    }
-
-        //    if (!concentrationMatches.Any())
-        //        return result;
-
-        //    // Associate each ion with the nearest concentration
-        //    foreach (var ion in ionMatches)
-        //    {
-        //        // Find the nearest concentration for this ion
-        //        var nearestConcentration = concentrationMatches
-        //            .OrderBy(c => Math.Abs(c.Position - (ion.Position + ion.Length / 2)))
-        //            .FirstOrDefault();
-
-        //        // Add the ion and its concentration (in mM)
-        //        result.Add((ion.Ion, nearestConcentration.Value));
-        //    }
-
-        //    return result;
-        //}
-
         public List<(string, double)> FindIonsAndConcentrationsAsync(string sentence, List<string> knownIons)
         {
             var result = new List<(string, double)>();
