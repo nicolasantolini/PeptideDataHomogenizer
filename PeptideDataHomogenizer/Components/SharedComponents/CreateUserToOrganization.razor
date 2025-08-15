@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Identity.EntityFrameworkCore
 @using PeptideDataHomogenizer.Data
 @using PeptideDataHomogenizer.Services
+@using System.Security.Cryptography
 @inject IJSRuntime JSRuntime
 
 @inject UserManager<ApplicationUser> UserManager
@@ -245,9 +246,17 @@
     private string GenerateRandomPassword(int length)
     {
         const string validChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()";
-        var random = new Random();
-        return new string(Enumerable.Repeat(validChars, length)
-            .Select(s => s[random.Next(s.Length)]).ToArray());
+        char[] password = new char[length];
+        byte[] randomBytes = new byte[length];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomBytes);
+        }
+        for (int i = 0; i < length; i++)
+        {
+            password[i] = validChars[randomBytes[i] % validChars.Length];
+        }
+        return new string(password);
     }
 
     private IUserEmailStore<ApplicationUser> GetEmailStore()
